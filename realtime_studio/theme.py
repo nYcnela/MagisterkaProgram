@@ -116,17 +116,17 @@ QTabBar::tab:hover {
   color: #dff5ff;
 }
 QSplitter::handle {
-  background: rgba(120, 154, 201, 88);
-  border-radius: 4px;
+  background: transparent;
 }
 QSplitter::handle:hover {
-  background: rgba(141, 180, 230, 145);
+  background: rgba(141, 180, 230, 60);
+  border-radius: 2px;
 }
 QSplitter::handle:horizontal {
-  width: 12px;
+  width: 5px;
 }
 QSplitter::handle:vertical {
-  height: 10px;
+  height: 5px;
 }
 QProgressBar#BootBar {
   border: 1px solid rgba(84, 119, 165, 120);
@@ -151,5 +151,12 @@ QScrollBar::handle:vertical {
 }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
   height: 0px;
+}
+QScrollArea {
+  background: transparent;
+  border: none;
+}
+QScrollArea > QWidget > QWidget {
+  background: transparent;
 }
 """

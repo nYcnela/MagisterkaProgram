@@ -13,6 +13,10 @@ SETTINGS_PATH = APP_DIR / "settings.json"
 
 @dataclass
 class StudioConfig:
+    # Dancer profile
+    dancer_first_name: str = ""
+    dancer_last_name: str = ""
+
     # Optional override. Empty means auto-discover backend root.
     backend_root: str = ""
     python_exec: str = sys.executable
