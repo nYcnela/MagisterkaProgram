@@ -1,0 +1,10 @@
+{
+  "node_host": "100.90.0.102",
+  "node_port": 8010,
+  "auto_connect": true,
+  "dance_id": "k_krok_podstawowy_polonez",
+  "sequence_name": "udp_sequence",
+  "gender": "female",
+  "step_type": "step",
+  "auto_start_llm": true
+}

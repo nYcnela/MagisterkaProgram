@@ -65,6 +65,47 @@ albo:
 - Jesli log LLM pokazuje fallback do CPU, problem lezy w srodowisku Pythona / CUDA, nie w samym UI.
 - Skrypt setupu zatrzymuje sie, jesli nie uda sie zainstalowac `bitsandbytes`, bo bez tego 4-bit nie bedzie gotowy zgodnie z zalozeniem projektu.
 
+## Roles / Deploy
+
+Repo wspiera teraz 3 role:
+
+- `FullApp` - obecny tryb all-in-one
+- `ComputeNode` - backend + LLM + manager API/WS na mocnym komputerze
+- `RemoteGUI` - lekkie GUI, ktore laczy sie do ComputeNode i pokazuje logi / feedback / status
+
+Foldery deploy generuje:
+
+```bash
+python tools/build_distributions.py
+# albo:
+python -m tools.build_distributions
+```
+
+Po wygenerowaniu pojawia sie katalog:
+
+- `deploy/FullApp`
+- `deploy/ComputeNode`
+- `deploy/RemoteGUI`
+
+W `ComputeNode` i `RemoteGUI` dostajesz:
+
+- `1_INSTALUJ.bat`
+- `2_KONFIGURACJA.bat`
+- `3_START.bat`
+- lokalny plik `config.json` dla danej roli
+
+Model pracy:
+
+- Kalman / VR lub testowy sender UDP wysyla dane bezposrednio do ComputeNode
+- backend i LLM licza lokalnie na ComputeNode
+- RemoteGUI pobiera stan przez HTTP + WebSocket
+
+Przy tescie po Tailscale:
+
+- `RemoteGUI/config.json` powinno miec `node_host` ustawione na adres ComputeNode
+- `ComputeNode/config.json` moze miec `udp_host=0.0.0.0`, jesli dane przychodza z innej maszyny
+- `llm_host` na ComputeNode zostaje lokalny, zwykle `127.0.0.1`
+
 ## Embedded Backend Mode
 
 App can run without external Magisterka path discovery by using local bundle:

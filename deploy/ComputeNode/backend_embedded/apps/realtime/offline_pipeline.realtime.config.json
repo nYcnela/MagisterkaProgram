@@ -1,0 +1,79 @@
+{
+  "python_executable": null,
+  "continue_on_error": false,
+  "log_dir": "data/tmp/offline_runs",
+  "variables": {
+    "csv_raw_root": "data/csv/raw",
+    "csv_calculated_root": "data/csv/manual/calculated",
+    "csv_normalized_root": "data/csv/manual/normalized",
+    "csv_downsampled_root": "data/csv/manual/downsampled",
+    "plot_segment_bounds_root": "Plots/manual/4segmentation_step_bounds",
+    "json_segment_bounds_root": "data/json/manual/pipeline/4_segmentation_bounds",
+    "json_arms_root": "data/json/manual/pipeline/7_arms_position"
+  },
+  "pipeline_order": [
+    "calculate_angles",
+    "normalize",
+    "downsample",
+    "segment_bounds",
+    "arms_metrics"
+  ],
+  "artifact_checks": {},
+  "event_stats_roots": [],
+  "stages": {
+    "calculate_angles": {
+      "enabled": true,
+      "script": "Scripts/0calculate_angles_v3.py",
+      "args": {
+        "in-root": "${csv_raw_root}",
+        "out-root": "${csv_calculated_root}"
+      }
+    },
+    "normalize": {
+      "enabled": true,
+      "script": "Scripts/1fast_normalize.py",
+      "args": {
+        "in-root": "${csv_calculated_root}",
+        "out-root": "${csv_normalized_root}",
+        "window": [
+          0,
+          50
+        ],
+        "target-pelvis": 1.0,
+        "unit-label": "norm"
+      }
+    },
+    "downsample": {
+      "enabled": true,
+      "script": "Scripts/2filter_and_downsample_w_angles.py",
+      "args": {
+        "in-root": "${csv_normalized_root}",
+        "out-root": "${csv_downsampled_root}",
+        "target-fps": 50.0,
+        "cutoff": 8.0,
+        "order": 4
+      }
+    },
+    "segment_bounds": {
+      "enabled": true,
+      "script": "Scripts/4segmentation_bounds_w_head.py",
+      "args": {
+        "in-root": "${csv_downsampled_root}",
+        "out-root": "${plot_segment_bounds_root}",
+        "json-root": "${json_segment_bounds_root}",
+        "fs": 50.0,
+        "skip-plots": true
+      }
+    },
+    "arms_metrics": {
+      "enabled": true,
+      "script": "Scripts/7arms_position_recognition_w_json.py",
+      "args": {
+        "in-root": "${csv_downsampled_root}",
+        "in-json-root": "${json_segment_bounds_root}",
+        "out-json-root": "${json_arms_root}",
+        "fs": 50.0
+      }
+    }
+  }
+}
