@@ -1,0 +1,21 @@
+# Virtual environment
+.venv/
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# Temporary runtime data
+backend_embedded/data/tmp/
+
+# Settings (local per machine)
+settings.json
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Old docs
+instrukcja.txt

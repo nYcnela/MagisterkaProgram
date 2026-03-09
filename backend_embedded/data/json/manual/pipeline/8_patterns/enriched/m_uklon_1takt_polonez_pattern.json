@@ -1,0 +1,179 @@
+{
+  "pattern_name": "m_uklon_1takt_polonez",
+  "source_file_count": 3,
+  "majority_threshold": 2,
+  "consensus_sequence_expanded": [
+    "bow, R lead",
+    "head nod",
+    "bow, L lead",
+    "head nod"
+  ],
+  "consensus_vocabulary": [
+    "bow, L lead",
+    "bow, R lead",
+    "head nod"
+  ],
+ "arm_stability_metrics": {
+    "Lshoulder_x": {
+      "stable_period_1": {
+        "start_time_seconds": 0.5,
+        "end_time_seconds": 4.25,
+        "duration_seconds": 3.75,
+        "angle_range_degrees": {
+          "min": -24.0,
+          "max": -10.0
+        },
+        "angle_stats_degrees": {
+          "average": -17.0,
+          "stdev": 3.5
+        }
+      }
+    },
+    "Rshoulder_x": {
+      "stable_period_1": {
+        "start_time_seconds": 2.0,
+        "end_time_seconds": 6.5,
+        "duration_seconds": 4.5,
+        "angle_range_degrees": {
+          "min": -17.0,
+          "max": -3.0
+        },
+        "angle_stats_degrees": {
+          "average": -10.0,
+          "stdev": 3.5
+        }
+      }
+    },
+    "Lshoulder_y": {
+      "stable_period_1": {
+        "start_time_seconds": 2.0,
+        "end_time_seconds": 4.25,
+        "duration_seconds": 2.25,
+        "angle_range_degrees": {
+          "min": 11.0,
+          "max": 15.0
+        },
+        "angle_stats_degrees": {
+          "average": 13.0,
+          "stdev": 1.0
+        }
+      }
+    },
+    "Rshoulder_y": {
+      "stable_period_1": {
+        "start_time_seconds": 2.35,
+        "end_time_seconds": 4.5,
+        "duration_seconds": 2.15,
+        "angle_range_degrees": {
+          "min": 14.0,
+          "max": 23.0
+        },
+        "angle_stats_degrees": {
+          "average": 18.5,
+          "stdev": 2.25
+        }
+      }
+    },
+    "LElbow_x": {
+      "stable_period_1": {
+        "start_time_seconds": 0.5,
+        "end_time_seconds": 4.0,
+        "duration_seconds": 3.5,
+        "angle_range_degrees": {
+          "min": 31.0,
+          "max": 42.0
+        },
+        "angle_stats_degrees": {
+          "average": 36.5,
+          "stdev": 2.75
+        }
+      }
+    },
+    "RElbow_x": {
+      "stable_period_1": {
+        "start_time_seconds": 2.0,
+        "end_time_seconds": 4.25,
+        "duration_seconds": 2.25,
+        "angle_range_degrees": {
+          "min": 37.0,
+          "max": 40.0
+        },
+        "angle_stats_degrees": {
+          "average": 38.5,
+          "stdev": 0.75
+        }
+      }
+    }
+  },
+  "performance_metrics": {
+    "bow, L lead": {
+      "duration_seconds": {
+        "average": 0.8533,
+        "min": 0.84,
+        "max": 0.86,
+        "stdev": 0.0115,
+        "sample_count": 3
+      },
+      "step_length_normalized": {
+        "average": 3.1416,
+        "min": 3.1,
+        "max": 3.167,
+        "stdev": 0.0363,
+        "sample_count": 3
+      },
+      "max_knee_angle": {
+        "average": 69.7462,
+        "min": 67.9798,
+        "max": 72.6404,
+        "stdev": 2.5268,
+        "sample_count": 3
+      },
+      "max_arm_angle": {
+        "average": 34.5563,
+        "min": 31.003,
+        "max": 37.9295,
+        "stdev": 3.4668,
+        "sample_count": 3
+      }
+    },
+    "bow, R lead": {
+      "duration_seconds": {
+        "average": 0.86,
+        "min": 0.8,
+        "max": 0.94,
+        "stdev": 0.0721,
+        "sample_count": 3
+      },
+      "step_length_normalized": {
+        "average": 3.0167,
+        "min": 2.6229,
+        "max": 3.3163,
+        "stdev": 0.3562,
+        "sample_count": 3
+      },
+      "max_knee_angle": {
+        "average": 72.0384,
+        "min": 65.984,
+        "max": 77.9858,
+        "stdev": 6.0016,
+        "sample_count": 3
+      },
+      "max_arm_angle": {
+        "average": 21.4025,
+        "min": 16.6888,
+        "max": 24.329,
+        "stdev": 4.1217,
+        "sample_count": 3
+      }
+    },
+    "head nod": {
+      "duration_seconds": {
+        "average": 0.8867,
+        "min": 0.8,
+        "max": 1.08,
+        "stdev": 0.1048,
+        "sample_count": 6
+      }
+    }
+  }
+}
