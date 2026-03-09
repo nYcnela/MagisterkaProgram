@@ -67,6 +67,7 @@ _model = None
 _tokenizer = None
 _device: Optional[torch.device] = None
 _model_id: str = _DEFAULT_MODEL_ID
+_device_report: dict[str, object] = {}
 
 
 def _read_model_id_from_adapter(adapter_dir: Path) -> Optional[str]:
@@ -83,17 +84,71 @@ def _read_model_id_from_adapter(adapter_dir: Path) -> Optional[str]:
     return None
 
 
+def _build_device_report() -> dict[str, object]:
+    report: dict[str, object] = {
+        "platform": platform.platform(),
+        "python": sys.version.split()[0],
+        "torch": getattr(torch, "__version__", "unknown"),
+        "torch_cuda_build": getattr(torch.version, "cuda", None),
+        "cuda_available": bool(torch.cuda.is_available()),
+        "mps_available": bool(
+            getattr(torch.backends, "mps", None) and torch.backends.mps.is_available()
+        ),
+    }
+
+    if torch.cuda.is_available():
+        try:
+            device_count = torch.cuda.device_count()
+        except Exception:
+            device_count = 0
+        report["cuda_device_count"] = device_count
+        devices: list[str] = []
+        for idx in range(device_count):
+            try:
+                devices.append(torch.cuda.get_device_name(idx))
+            except Exception:
+                devices.append(f"cuda:{idx}")
+        report["cuda_devices"] = devices
+    return report
+
+
+def _cpu_fallback_reason(report: dict[str, object]) -> str:
+    if report.get("cuda_available"):
+        return "CUDA was available, so CPU fallback should not happen here."
+    if report.get("torch_cuda_build") is None:
+        return "PyTorch build has no CUDA support."
+    return "CUDA runtime/driver or GPU visibility is unavailable for this Python environment."
+
+
+def _log_device_report(report: dict[str, object], device: torch.device) -> None:
+    print(f"[LLM] Platform: {report['platform']}")
+    print(
+        f"[LLM] Python: {report['python']} | torch: {report['torch']} | "
+        f"torch CUDA build: {report['torch_cuda_build']}"
+    )
+    print(
+        f"[LLM] CUDA available: {report['cuda_available']} | "
+        f"MPS available: {report['mps_available']}"
+    )
+    if report.get("cuda_devices"):
+        print(f"[LLM] CUDA devices: {', '.join(report['cuda_devices'])}")
+    if device.type == "cpu":
+        print(f"[LLM][warn] Falling back to CPU. Reason: {_cpu_fallback_reason(report)}")
+
+
 def load_model(adapter_dir: Path, model_id: str, use_4bit: bool = True) -> None:
-    global _model, _tokenizer, _device, _model_id
+    global _model, _tokenizer, _device, _model_id, _device_report
 
     from transformers import AutoTokenizer, AutoModelForCausalLM
     from peft import PeftModel
 
     _model_id = model_id
     _device = _pick_device()
+    _device_report = _build_device_report()
     dtype = _pick_dtype(_device)
     is_darwin = platform.system() == "Darwin"
 
+    _log_device_report(_device_report, _device)
     print(f"[LLM] Device: {_device} | dtype: {dtype}")
     print(f"[LLM] Loading tokenizer from {_model_id} ...")
 
@@ -213,7 +268,13 @@ class GenerateResponse(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "model_loaded": _model is not None, "model_id": _model_id}
+    return {
+        "status": "ok",
+        "model_loaded": _model is not None,
+        "model_id": _model_id,
+        "device": str(_device) if _device is not None else None,
+        "device_report": _device_report,
+    }
 
 
 @app.post("/generate", response_model=GenerateResponse)

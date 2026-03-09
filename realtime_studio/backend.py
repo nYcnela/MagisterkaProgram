@@ -361,6 +361,7 @@ class LLMRunner(QObject):
                 raise FileNotFoundError(f"Missing adapter dir: {adapter_dir}")
 
             args = [
+                "-u",
                 str(script),
                 "--adapter-dir",
                 str(adapter_dir),
