@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import sys
 import unicodedata
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -129,6 +129,17 @@ class MainWindow(QMainWindow):
             return ""
         parts = [p for p in [first, last] if p]
         return self._sanitize_dirname("_".join(parts))
+
+    def _cfg_with_dancer_subdir(self, cfg: StudioConfig) -> StudioConfig:
+        subdir = self._dancer_output_subdir()
+        if not subdir:
+            return cfg
+        return replace(
+            cfg,
+            output_root=str(Path(cfg.output_root) / subdir),
+            candidate_root=str(Path(cfg.candidate_root) / subdir),
+            offline_runs_root=str(Path(cfg.offline_runs_root) / subdir),
+        )
 
     def _build_ui(self) -> None:
         self.setWindowTitle("Realtime Studio")
@@ -713,15 +724,6 @@ class MainWindow(QMainWindow):
         resolved_dance_id, _ = self._resolve_dance_id()
         backend_root = str(self._detected_backend_root) if self._detected_backend_root else self.cfg.backend_root
 
-        dancer_subdir = self._dancer_output_subdir()
-        base_output = self.cfg.output_root
-        base_candidate = self.cfg.candidate_root
-        base_offline = self.cfg.offline_runs_root
-        if dancer_subdir:
-            base_output = str(Path(base_output) / dancer_subdir)
-            base_candidate = str(Path(base_candidate) / dancer_subdir)
-            base_offline = str(Path(base_offline) / dancer_subdir)
-
         cfg = StudioConfig(
             dancer_first_name=self.dancer_first_name_edit.text().strip(),
             dancer_last_name=self.dancer_last_name_edit.text().strip(),
@@ -745,9 +747,9 @@ class MainWindow(QMainWindow):
             live_z_threshold=float(self.live_z_spin.value()),
             live_major_order_threshold=int(self.live_order_spin.value()),
             live_emit_minor_order_text=bool(self.live_minor_check.isChecked()),
-            output_root=base_output,
-            candidate_root=base_candidate,
-            offline_runs_root=base_offline,
+            output_root=self.cfg.output_root,
+            candidate_root=self.cfg.candidate_root,
+            offline_runs_root=self.cfg.offline_runs_root,
             pattern_file=self.cfg.pattern_file,
             auto_control_port=bool(self.auto_control_port_check.isChecked()),
             auto_detect_dance=bool(self.auto_dance_check.isChecked()),
@@ -822,7 +824,7 @@ class MainWindow(QMainWindow):
         self._append_log("[INFO] Profil wczytany ponownie.")
 
     def _refresh_command_preview(self) -> None:
-        cfg = self._collect_from_widgets()
+        cfg = self._cfg_with_dancer_subdir(self._collect_from_widgets())
         try:
             program, args, run_id = self.runner.build_command(cfg, run_id="preview_run")
             preview = " ".join([program, *args])
@@ -848,12 +850,14 @@ class MainWindow(QMainWindow):
 
     def _check_dancer_dir_exists(self) -> bool:
         """Check if dancer output directory already exists; ask user what to do."""
+        runtime_cfg = self._cfg_with_dancer_subdir(self._collect_from_widgets())
         subdir = self._dancer_output_subdir()
-        if not subdir or not self._detected_backend_root:
+        backend_root = Path(runtime_cfg.backend_root) if runtime_cfg.backend_root else self._detected_backend_root
+        if not subdir or backend_root is None:
             return True
 
-        base_output = Path(self.cfg.output_root.split(subdir)[0] if subdir in self.cfg.output_root else self.cfg.output_root)
-        dancer_dir = self._detected_backend_root / base_output / subdir
+        output_root = Path(runtime_cfg.output_root)
+        dancer_dir = output_root if output_root.is_absolute() else (backend_root / output_root).resolve()
         if not dancer_dir.exists():
             return True
 
@@ -867,7 +871,8 @@ class MainWindow(QMainWindow):
         return reply == QMessageBox.StandardButton.Yes
 
     def _start_receiver_now(self) -> None:
-        if self.runner.start(self.cfg):
+        runtime_cfg = self._cfg_with_dancer_subdir(self.cfg)
+        if self.runner.start(runtime_cfg):
             self.start_btn.setEnabled(False)
             self.stop_btn.setEnabled(True)
             self._set_component_state(self.backend_state_pill, self.backend_boot_bar, "STARTING", "booting")

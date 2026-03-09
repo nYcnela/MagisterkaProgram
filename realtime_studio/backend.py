@@ -175,6 +175,13 @@ def _resolve_under_root(path_like: str, root: Path) -> Path:
     return (root / p).resolve()
 
 
+def _extract_feedback_text(line: str) -> str | None:
+    marker = "[FEEDBACK]"
+    if marker not in line:
+        return None
+    return line.split(marker, 1)[1].strip()
+
+
 class BackendRunner(QObject):
     started = Signal(str)
     stopped = Signal(int, str)
@@ -307,8 +314,9 @@ class BackendRunner(QObject):
         payload = bytes(self._process.readAllStandardOutput()).decode("utf-8", errors="replace")
         for line in payload.splitlines():
             self.log_line.emit(line)
-            if line.startswith("[FEEDBACK]"):
-                self.feedback_line.emit(line)
+            feedback = _extract_feedback_text(line)
+            if feedback is not None:
+                self.feedback_line.emit(feedback)
 
     def _on_finished(self, exit_code: int, _exit_status: QProcess.ExitStatus) -> None:
         self.stopped.emit(exit_code, self._run_id)
