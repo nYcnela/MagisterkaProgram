@@ -1,2 +1,18 @@
-PySide6>=6.7
+# Core desktop UI
+PySide6>=6.7,<7
 
+# Numerical / data pipeline
+numpy>=1.26,<3
+pandas>=2.2,<3
+scipy>=1.13,<2
+matplotlib>=3.8,<4
+
+# LLM runtime
+fastapi>=0.115,<1
+uvicorn>=0.30,<1
+pydantic>=2.8,<3
+transformers>=4.48,<5
+peft>=0.14,<1
+accelerate>=1.1,<2
+safetensors>=0.4,<1
+sentencepiece>=0.2,<1
