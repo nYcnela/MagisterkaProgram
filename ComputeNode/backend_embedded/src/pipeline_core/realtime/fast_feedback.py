@@ -371,7 +371,6 @@ def _select_sentences(candidates: list[Dict[str, Any]], max_sentences: int) -> l
     if not candidates:
         return []
 
-    # Preferuj nie-knee-only, bo te opisy są stabilniejsze i bliższe offline.
     primary = [c for c in candidates if not bool(c.get("knee_only", False))]
     secondary = [c for c in candidates if bool(c.get("knee_only", False))]
 

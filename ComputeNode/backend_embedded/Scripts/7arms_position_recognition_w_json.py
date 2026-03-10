@@ -81,11 +81,9 @@ def stable_intervals(
     if len(signal) < win:
         return []
 
-    # 1. KLUCZOWA ZMIANA: Obliczenie progu adaptacyjnego
     signal_std = np.std(signal)
     adaptive_thresh = signal_std * thresh_factor
 
-    # 2. Użycie "widełek", aby próg nie był ani za niski, ani za wysoki
     thresh = np.clip(adaptive_thresh, min_thresh, max_thresh)
     print(f"  -> Dla sygnału o std={signal_std:.2f}, użyto progu stabilności: {thresh:.2f}")
 

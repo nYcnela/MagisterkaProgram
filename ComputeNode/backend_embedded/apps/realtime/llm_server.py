@@ -3,8 +3,7 @@
 """
 LLM Feedback Server  -  base model + LoRA adapter
 =================================================
-Loads the fine-tuned model once at startup and serves inference via a
-lightweight FastAPI HTTP API.
+Loads the fine-tuned model once at startup and serves inference.
 
 Usage:
     python apps/realtime/llm_server.py \
@@ -38,7 +37,7 @@ from pydantic import BaseModel
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 # ---------------------------------------------------------------------------
-# Device / dtype helpers (same logic as test_danube_supervised.py)
+# Device / dtype helpers 
 # ---------------------------------------------------------------------------
 
 def _pick_device() -> torch.device:

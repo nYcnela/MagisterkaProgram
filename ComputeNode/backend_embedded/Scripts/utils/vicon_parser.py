@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Wspólne narzędzia do parsowania plików CSV z Vicon/Nexus.
 Obsługuje format z dwiema sekcjami: Angles i Trajectories.

@@ -23,7 +23,7 @@ def write_window_as_vicon_csv(
     """
     Write a single realtime window to a minimal Vicon-like CSV with Trajectories section.
 
-    The format is intentionally compatible with Scripts/0calculate_angles_v3.py::load_trajectories.
+    compatible with Scripts/0calculate_angles_v3.py::load_trajectories.
     """
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fps = int(round(sample_rate_hz))

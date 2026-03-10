@@ -278,7 +278,7 @@ def build_window_record(
         if out_block:
             metrics_summary[key] = out_block
 
-    # Arm/elbow stability summary (coarse, but compatible with 9_2 prompt generator).
+    # Arm/elbow stability summary
     stage7_stab = dict(stage7_json.get("arm_stability_metrics") or {})
     stability_map = {
         "Lshoulder_x": "arm_stability_left_x",

@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Offline pipeline orchestrator used by CLI wrappers."""
 from __future__ import annotations
 

@@ -7,32 +7,20 @@ Kluczowe konwencje Vicon Plug-in Gait:
 - Sekwencja Cardan/Euler: YXZ dla większości stawów (flexion, adduction, rotation)
 - Kąty są liczone jako rotacja segmentu dystalnego względem proksymalnego
 
-=== WŁASNA DEFINICJA KĄTÓW GŁOWY DLA TAŃCA POLONEZ ===
-Zamiast odtwarzać skomplikowaną definicję Vicon Plug-in Gait, używamy prostej
-i intuicyjnej definicji kątów głowy względem LABORATORIUM:
-
+=== WŁASNA DEFINICJA KĄTÓW GŁOWY ===
   HeadAngles_X = PITCH (kiwanie przód-tył)
     - Definicja: arcsin(-X_head.z) gdzie X_head = oś "do przodu" głowy
     - Interpretacja: (+) = głowa pochylona DO PRZODU (ukłon!)
                      (-) = głowa odchylona DO TYŁU
-    - Zastosowanie: WYKRYWANIE UKŁONÓW W POLONEZIE
 
   HeadAngles_Y = ROLL (przechylenie na bok)
     - Definicja: arctan2(Y_head.z, Z_head.z)
     - Interpretacja: (+) = głowa przechylona W PRAWO (prawe ucho do ramienia)
                      (-) = głowa przechylona W LEWO
-    - Zastosowanie: eleganckie gesty boczne
 
   HeadAngles_Z = YAW (obrót w poziomie)
     - Definicja: arctan2(X_head.y, X_head.x)
     - Interpretacja: kierunek patrzenia w płaszczyźnie XY
-    - Zastosowanie: kierunek spojrzenia tancerza
-
-Zalety tej definicji:
-- Pitch bezpośrednio mierzy głębokość ukłonu
-- Niezależne od progression frame - działa dla statycznych i dynamicznych nagrań
-- Łatwa interpretacja: 0° = głowa prosto, +20° pitch = ukłon ~20°
-- Dobre featury do ML/klasyfikacji gestów tanecznych
 """
 
 import argparse
@@ -55,7 +43,7 @@ UNIVERSAL_OFFSETS = {
     'RShoulderAngles_X': -26.0,
     'RShoulderAngles_Y': 0.0,
     'LPelvisAngles_Z': 0.0,
-    'LHeadAngles_X': 0.0,  # zostawiamy 0; HeadAngles powinny wyjść bez offsetu jeśli frame'y są OK
+    'LHeadAngles_X': 0.0, 
     'LHipAngles_Y': 8.5,
     'RHipAngles_Y': 8.5,
 }
@@ -311,7 +299,7 @@ def calculate_pelvis_angles(pelvis_frame: np.ndarray) -> np.ndarray:
 
 
 # --------------------------------------------------------------------------
-# PROGRESSION FRAME (IRL-friendly)
+# PROGRESSION FRAME 
 # --------------------------------------------------------------------------
 
 def compute_static_progression_frame(markers: Dict[str, np.ndarray]) -> np.ndarray:
@@ -496,7 +484,7 @@ def calculate_all_angles_vicon(traj_data: np.ndarray, marker_names: list,
     }
 
     # =================================================================
-    # STATIC PROGRESSION FRAME (IRL-friendly)
+    # STATIC PROGRESSION FRAME
     # =================================================================
     progression_frame_static = compute_static_progression_frame(markers)
 
@@ -513,7 +501,7 @@ def calculate_all_angles_vicon(traj_data: np.ndarray, marker_names: list,
         pelvis_origin, pelvis_frame = build_pelvis_frame(lasi, rasi, lpsi, rpsi)
 
         pelvis_angles = calculate_pelvis_angles(pelvis_frame)
-        angles['LPelvisAngles_X'][i] = pelvis_angles[0]  # Obliquity
+        angles['LPelvisAngles_X'][i] = pelvis_angles[0]  
         angles['LPelvisAngles_Y'][i] = pelvis_angles[1]  # Tilt
         angles['LPelvisAngles_Z'][i] = -pelvis_angles[2]  # Rotation
 
@@ -641,7 +629,7 @@ def calculate_all_angles_vicon(traj_data: np.ndarray, marker_names: list,
         angles['RElbowAngles_Z'][i] = -relbow_angles[2]
 
         # =============================================================
-        # HEAD - WŁASNA DEFINICJA DLA TAŃCA POLONEZ
+        # HEAD 
         # =============================================================
         # Prosta i intuicyjna definicja kątów głowy względem LABORATORIUM:
         #   X = PITCH (kiwanie przód-tył) - ukłony!
@@ -654,7 +642,7 @@ def calculate_all_angles_vicon(traj_data: np.ndarray, marker_names: list,
         rbhd = markers['RBHD'][i]
         _, head_frame = build_head_frame(lfhd, rfhd, lbhd, rbhd)
 
-        # Wyciągnij osie głowy (kolumny macierzy rotacji w układzie LAB)
+        # osie głowy
         x_head = head_frame[:, 0]  # oś "do przodu" głowy
         y_head = head_frame[:, 1]  # oś "w lewo" głowy
         z_head = head_frame[:, 2]  # oś "do góry" głowy
@@ -674,9 +662,9 @@ def calculate_all_angles_vicon(traj_data: np.ndarray, marker_names: list,
         head_yaw = np.degrees(np.arctan2(x_head[1], x_head[0]))
 
         # Zapisz kąty
-        angles['LHeadAngles_X'][i] = head_pitch  # PITCH - ukłony!
-        angles['LHeadAngles_Y'][i] = head_roll   # ROLL - przechylenie
-        angles['LHeadAngles_Z'][i] = head_yaw    # YAW - obrót
+        angles['LHeadAngles_X'][i] = head_pitch  # PITCH - ukłony
+        angles['LHeadAngles_Y'][i] = head_roll   # ROLL
+        angles['LHeadAngles_Z'][i] = head_yaw    # YAW
 
         # R = L (głowa jest symetryczna)
         angles['RHeadAngles_X'][i] = head_pitch

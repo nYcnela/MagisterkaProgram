@@ -376,7 +376,7 @@ def generate_description(
     filtered = {k: v for k, v in z_scores.items() if v > z_threshold}
     top_keys_all = sorted(filtered, key=lambda k: filtered[k], reverse=True)
 
-    # kolejność ruchów → wpływa na to, ile feedbacku dajemy
+    # kolejność ruchów -> wpływa na to, ile feedbacku dajemy
     order_text = ""
     if order_score is not None:
         if order_score < major_order_threshold:
@@ -454,7 +454,7 @@ def generate_description(
 
 
 # -------------------------
-# zamiast "[INST] ... [/INST]" budujemy czysty prompt-train target
+# prompt-train target
 # -------------------------
 
 def process_file(data):

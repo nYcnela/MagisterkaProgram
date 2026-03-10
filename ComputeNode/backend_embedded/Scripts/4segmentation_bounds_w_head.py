@@ -19,7 +19,6 @@ from utils import (
 # SEKCJA 2: ALGORYTMY DETEKCJI
 # --------------------------------------------------------------------------
 
-# --- Granice wg metody ukłonu: minima po bokach piku + progi procentowe ---
 def find_bow_bounds(signal: np.ndarray, peak_idx: int,
                     alpha_start: float = 0.15,
                     alpha_end: float = 0.15) -> Tuple[int, int]:
@@ -48,7 +47,6 @@ def find_bow_bounds(signal: np.ndarray, peak_idx: int,
 
     return start, end
 
-# >>> NOWE: uniwersalne granice zdarzenia oparte na piku (używa find_bow_bounds)
 def find_event_bounds(signal: np.ndarray,
                       peak_idx: int,
                       alpha_start: float = 0.05,
@@ -225,34 +223,16 @@ def merge_steps_with_side_labels(step_events, side_step_events, fs, overlap_s=0.
     return sorted(events, key=lambda x: x[0])
 
 
-# To jest funkcja z Twojego PIERWSZEGO skryptu - ona jest naszym źródłem prawdy o pikach
 def detect_gait_peaks_only(Lknee, Rknee, fs, Lshoulder, Rshoulder, gender, **kwargs):
-    """
-    Ta funkcja jest wzięta 1:1 z Twojego pierwszego skryptu.
-    Jej jedynym zadaniem jest znalezienie listy ZAUFANYCH pików.
-    Zwraca listę: [(frame, 'L step'), (frame, 'R step (accented)'), ...]
-    """
-    # ... wklej tutaj CAŁĄ zawartość funkcji find_accented_gait_events z PIERWSZEGO skryptu ...
-    # Upewnij się, że na końcu zwraca posortowaną listę `final_events`
-
-    # Przykładowy szkielet (wklej tutaj swoją implementację)
-    min_prominence = 18.0  # Użyj wartości, które dawały idealne wyniki
+    min_prominence = 18.0  # wartości, które dawały idealne wyniki
     L_idx, _ = find_peaks(Lknee, prominence=min_prominence)
     R_idx, _ = find_peaks(Rknee, prominence=min_prominence)
-
-    # ... cała logika parowania i etykietowania z pierwszego skryptu ...
 
     events = []
     for i in L_idx: events.append({'frame': i, 'leg': 'L', 'depth': Lknee[i]})
     for i in R_idx: events.append({'frame': i, 'leg': 'R', 'depth': Rknee[i]})
     events.sort(key=lambda x: x['frame'])
 
-    # ... itd. (pełna logika)
-    # Na końcu funkcja powinna zwrócić coś w stylu:
-    # final_events.sort(key=lambda x: x[0])
-    # return final_events
-
-    # Poniżej jest pełna implementacja z Twojego pierwszego kodu dla wygody:
     min_prominence = 18.0
     pair_window_s = 0.50
     bow_sync_s = 0.10
@@ -293,7 +273,6 @@ def detect_gait_peaks_only(Lknee, Rknee, fs, Lshoulder, Rshoulder, gender, **kwa
         if best_partner_idx != -1:
             event2 = events[best_partner_idx]
             if gender == "female":
-                # Użyj tych samych parametrów co detect_bow_events
                 bow_min_abs = 60.0  # minimalna głębokość dla obu kolan
                 bow_depth_tol_strict = 0.08  # ściślejsza tolerancja głębokości
                 is_synced = abs(event1['frame'] - event2['frame']) <= bow_frame_dist
@@ -353,11 +332,9 @@ def convert_peaks_to_boundaries(
     for peak_frame, peak_label in peak_events:
         # Pomiń zdarzenia, które nie są krokami (np. ukłony wykryte w starej funkcji)
         if "step" not in peak_label and "accent" not in peak_label:
-            # Możemy je przenieść bez zmian, jeśli chcemy
-            # boundary_events.append((peak_frame, peak_label))
             continue
 
-        # Wykryj, której nogi dotyczy zdarzenie
+        # której nogi dotyczy zdarzenie
         leg = None
         if "L " in peak_label or peak_label.startswith("L"):
             leg = 'L'
@@ -366,7 +343,6 @@ def convert_peaks_to_boundaries(
 
         if leg:
             signal = signals[leg]
-            # Użyj swojej logiki do znalezienia granic na podstawie piku
             start_frame, end_frame = find_event_bounds(
                 signal,
                 peak_idx=peak_frame,
@@ -374,13 +350,11 @@ def convert_peaks_to_boundaries(
                 alpha_end=alpha_end
             )
 
-            # Dodaj nowe etykiety start/end
             boundary_events.append((start_frame, f"{peak_label} start"))
             boundary_events.append((end_frame, f"{peak_label} end"))
 
     return sorted(boundary_events, key=lambda x: x[0])
 
-# >>> ZMIANA: kroki/akcenty też liczą granice metodą ukłonu (find_event_bounds)
 def find_accented_gait_events(
         Lknee: np.ndarray, Rknee: np.ndarray, fs: float,
         Lshoulder: Optional[np.ndarray], Rshoulder: Optional[np.ndarray],
@@ -401,7 +375,7 @@ def find_accented_gait_events(
         male_shoulder_win_high_s: float = 0.35,
         male_lead_knee_min_deg: float = 28.0,
         male_other_knee_max_ratio: float = 0.60,
-        near_simul_s: float = 0.12,          # NEW: „prawie jednoczesne” piki
+        near_simul_s: float = 0.12,       
 ) -> List[Tuple[int, str]]:
 
     def suppressed(f: int) -> bool:
@@ -454,7 +428,7 @@ def find_accented_gait_events(
         if j != -1:
             e2 = events[j]
 
-            # — odfiltruj kobiecy ukłon (prawie jednoczesne i głębokie po obydwu) —
+            # truj kobiecy ukłon (prawie jednoczesne i głębokie po obydwu) 
             is_deep_enough_for_bow = (e1['depth'] > 45.0 and e2['depth'] > 45.0)
             if gender == "female" and is_deep_enough_for_bow and abs(e1['frame'] - e2['frame']) <= bow_frame_dist:
                 avg_depth = 0.5 * (e1['depth'] + e2['depth'])
@@ -462,7 +436,7 @@ def find_accented_gait_events(
                     used.update({i, j})
                     continue
 
-            # wybór „lead”: normalnie wcześniejszy, ale przy prawie jednoczesnych → głębszy
+            # wybór „lead”: normalnie wcześniejszy, ale przy prawie jednoczesnych 
             if abs(e1['frame'] - e2['frame']) <= near_simul:
                 lead, other = (e1, e2) if e1['depth'] >= e2['depth'] else (e2, e1)
             else:
@@ -603,7 +577,7 @@ def detect_full_turns(pelvis_z, fs, angle_thresh=300.0, label="turn",
             if abs(yaw_deg[j] - start_val) >= angle_thresh:
                 duration_frames = j - i
                 
-                # Sprawdź czy czas trwania jest rozsądny
+                # Sprawdź czas
                 if duration_frames < min_frames or duration_frames > max_frames:
                     j += 1
                     continue
@@ -691,7 +665,7 @@ def detect_head_nod(Lhead: np.ndarray, fs: float,
 def calculate_head_nod_angles(events, Lhead, fs=50):
     """
     Dodaje do eventów 'head nod end' pole 'max_head_angle'
-    (czyli największe pochylenie głowy w trakcie ukłonu = teraz maksimum kąta).
+    (największe pochylenie głowy w trakcie ukłonu = teraz maksimum kąta).
     """
     enriched = []
     for i, ev in enumerate(events):
@@ -739,7 +713,7 @@ def process_file(
     print(f"Przetwarzanie pliku: {csv_path.name}...")
     try:
         # --------------------------------------------------------------------
-        # KROK 1: WCZYTYWANIE DANYCH (bez zmian)
+        # KROK 1: WCZYTYWANIE DANYCH
         # --------------------------------------------------------------------
         lines = csv_path.read_text(encoding="utf-8").splitlines(True)
         step_type = detect_step_from_filename(csv_path) if step_type == "auto" else step_type
@@ -778,7 +752,7 @@ def process_file(
         # KROK 2: ZMODYFIKOWANA LOGIKA DETEKCJI ZDARZEŃ
         # --------------------------------------------------------------------
 
-        # 2A) UKŁONY - Wykrywamy jako pierwsze, aby stworzyć "okna wyciszenia"
+        # 2A) UKŁONY
         bow_events = detect_bow_events(
             Lknee_flexion, Rknee_flexion, fs, Lshoulder, Rshoulder,
             gender=gender,
@@ -789,19 +763,14 @@ def process_file(
         )
         bow_windows = bow_events_to_windows(bow_events, fs, pad_s=0.12)
 
-        # 2B) KROKI - NOWA, BEZPIECZNA METODA DWUETAPOWA
-        # Najpierw wykrywamy TYLKO piki Twoją sprawdzoną metodą z pierwszego skryptu.
+        # 2B) KROKI 
         gait_peaks = detect_gait_peaks_only(
             Lknee_flexion, Rknee_flexion, fs, Lshoulder, Rshoulder,
             gender=gender
-            # Ważne: Twoja oryginalna funkcja musi być w stanie ignorować piki w "bow_windows".
-            # Jeśli nie potrafi, trzeba dodać prosty filtr po jej wykonaniu.
         )
-        # Filtrujemy piki, które wpadły w okna ukłonów, jeśli funkcja sama tego nie robi
         gait_peaks = [(frame, label) for frame, label in gait_peaks
                       if not any(start <= frame <= end for start, end in bow_windows)]
 
-        # Następnie konwertujemy KAŻDY zaufany pik na granice start/end.
         gait_events = convert_peaks_to_boundaries(
             gait_peaks,
             Lknee_flexion,
@@ -815,15 +784,12 @@ def process_file(
         # 2C) KROKI W BOK, RAMIONA I OBROTY
         if gender == "female":
             side_step_events = detect_side_steps(LHipY, RHipY, fs)
-            # Uwaga: `merge_steps_with_side_labels` wymagałby modyfikacji do pracy z etykietami start/end.
-            # Na razie pomijamy łączenie, aby uniknąć błędów.
             gait_events = merge_steps_with_side_labels(gait_events, side_step_events, fs)
             arm_events = detect_arms_up_peaks(LshoulderY, RshoulderY, fs)
             if step_type == "static":
                 turn_events = detect_full_turns(LPelvisZ, fs)
 
         head_nod_events: List[Tuple[int, str]] = []
-        # Wykrywanie ukłonów głowy - dla obu płci
         head_nod_events = detect_head_nod(Lhead, fs)
 
         # 2D) POŁĄCZENIE WSZYSTKICH ZDARZEŃ
@@ -920,7 +886,7 @@ def process_file(
             plt.close()
             print(f"Wykres zapisano w: {output_path}")
 
-        # --- ZAPIS JSONA (bez zmian) ---
+        # --- ZAPIS JSONA ---
         base_in_root = in_root if in_root is not None else getattr(args, "in_root", None)
         base_json_root = json_root if json_root is not None else getattr(args, "json_root", None)
         if base_in_root is None or base_json_root is None:
@@ -967,7 +933,7 @@ def process_file(
     except Exception as e:
         print(f"Nie udało się przetworzyć pliku {csv_path.name}. Błąd: {e}")
 
-# ---------------- DODATKOWE FUNKCJE POMIAROWE (bez zmian merytorycznych) ----------------
+# ---------------- DODATKOWE FUNKCJE POMIAROWE ----------------
 
 def calculate_step_length_normalized(traj_data: MotionData, end_frame: int, axis: int) -> Optional[float]:
     try:

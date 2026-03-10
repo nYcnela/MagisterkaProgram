@@ -81,7 +81,6 @@ def parse_marker_names(marker_line: str, delim: str) -> List[str]:
             name = name.rsplit(":", 1)[1].strip()
         names.append(name)
 
-    # CSV often ends marker line with trailing ';;;', which becomes an empty pseudo-marker.
     while names and names[-1] == "":
         names.pop()
     return names

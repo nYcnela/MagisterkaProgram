@@ -16,8 +16,6 @@ Użycie (drzewo):
 
 Użycie (pojedynczy plik):
   python 1fast_normalize.py --in path/to/file.csv [--out normalized/path/to/file.csv]
-
-Autor: "magisterka" toolchain
 """
 from __future__ import annotations
 import argparse
@@ -318,7 +316,7 @@ def main():
     cfg = NormConfig(window=tuple(args.window), target_pelvis=args.target_pelvis,
                      unit_label=args.unit_label, skip_markers=skip, force_keep=keep)
 
-    # Tryb pojedynczego pliku → jeśli nie podano --out, zmirroruj strukturę względem in-root do out-root
+    # Tryb pojedynczego pliku
     if args.inp:
         inp = args.inp
         if args.out is not None:
