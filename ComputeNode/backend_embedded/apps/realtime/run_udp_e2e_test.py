@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 from __future__ import annotations
 
 import argparse
@@ -39,7 +38,7 @@ MODEL_INSTRUCTION = (
     "then give a score from 1 to 5, where 5 is best."
 )
 
-# Live feedback is calibrated more conservatively than offline thesis artifacts.
+# Live feedback calibrated more conservatively than offline artifacts
 LIVE_DESC_Z_THRESHOLD = 1.5
 LIVE_MAJOR_ORDER_THRESHOLD = 60
 LIVE_EMIT_MINOR_ORDER_TEXT = False

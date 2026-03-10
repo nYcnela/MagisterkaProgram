@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Offline pipeline orchestrator used by CLI wrappers."""
 from __future__ import annotations
 
@@ -20,7 +19,6 @@ VAR_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
 
 def discover_project_root() -> Path:
-    # .../src/pipeline_core/offline_runner.py -> project root
     return Path(__file__).resolve().parents[2]
 
 

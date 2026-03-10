@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Wspólne narzędzia do parsowania plików CSV z Vicon/Nexus.
 Obsługuje format z dwiema sekcjami: Angles i Trajectories.
@@ -103,7 +101,7 @@ def find_section_indices(lines: List[str]) -> Tuple[SectionMeta, SectionMeta]:
     angles = build_meta(hdrs[0], hdrs[1])
     traj = build_meta(hdrs[1], None)
     
-    # Heurystyka: pierwsza sekcja to deg (Angles), druga to mm (Trajectories)
+    # pierwsza sekcja to deg (Angles), druga to mm (Trajectories)
     if "deg" not in lines[angles.units_idx].lower() and "mm" in lines[angles.units_idx].lower():
         angles, traj = traj, angles
     
