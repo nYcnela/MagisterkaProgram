@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import threading
 from urllib import error, request
+from urllib.parse import quote
 
 from PySide6.QtCore import QObject, QTimer, QUrl, Signal
 from PySide6.QtWebSockets import QWebSocket
@@ -12,6 +13,8 @@ from .remote_settings import RemoteGuiConfig
 
 class RemoteNodeClient(QObject):
     snapshot_loaded = Signal(object)
+    analysis_runs_loaded = Signal(object)
+    analysis_loaded = Signal(object)
     event_received = Signal(object)
     connection_changed = Signal(str, str)
     error = Signal(str)
@@ -73,6 +76,13 @@ class RemoteNodeClient(QObject):
     def stop_session(self, payload: dict | None = None) -> None:
         self._request_json("POST", "/session/stop", payload or {"reason": "remote_gui"}, "session_stop")
 
+    def fetch_analysis_runs(self) -> None:
+        self._request_json("GET", "/analysis/runs", None, "analysis_runs")
+
+    def fetch_analysis_run(self, run_id: str) -> None:
+        encoded = quote(run_id, safe="")
+        self._request_json("GET", f"/analysis/run/{encoded}", None, "analysis_run")
+
     def base_url(self) -> str:
         return f"http://{self.cfg.node_host}:{self.cfg.node_port}"
 
@@ -133,6 +143,10 @@ class RemoteNodeClient(QObject):
 
             if tag == "snapshot":
                 self.snapshot_loaded.emit(result)
+            elif tag == "analysis_runs":
+                self.analysis_runs_loaded.emit(result)
+            elif tag == "analysis_run":
+                self.analysis_loaded.emit(result)
             else:
                 self.response.emit(tag, result)
 

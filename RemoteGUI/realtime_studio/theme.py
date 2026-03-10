@@ -88,6 +88,26 @@ QTextEdit, QPlainTextEdit {
   font-family: "JetBrains Mono", "SF Mono", Consolas, monospace;
   font-size: 12px;
 }
+QListWidget {
+  background: rgba(1, 9, 26, 220);
+  border: 1px solid rgba(155, 174, 201, 90);
+  border-radius: 11px;
+  padding: 4px;
+  outline: none;
+  color: #dbeafe;
+}
+QListWidget::item {
+  padding: 8px 10px;
+  margin: 2px 0;
+  border-radius: 8px;
+}
+QListWidget::item:selected {
+  background: rgba(21, 54, 95, 210);
+  color: #f8fafc;
+}
+QListWidget::item:hover {
+  background: rgba(14, 44, 80, 180);
+}
 QCheckBox {
   color: #d1d5db;
 }

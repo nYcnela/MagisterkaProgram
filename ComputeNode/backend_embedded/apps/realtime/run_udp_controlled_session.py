@@ -65,6 +65,35 @@ class SessionRunner:
         for line in proc.stdout:
             print(f"{prefix}{line.rstrip()}")
 
+    def _write_session_meta(
+        self,
+        *,
+        session_id: str,
+        run_id: str,
+        dance_id: str,
+        pattern_file: Path,
+        control_payload: dict[str, Any],
+    ) -> None:
+        run_root = self.output_root / run_id
+        run_root.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "session_id": session_id,
+            "run_id": run_id,
+            "dance_id": dance_id,
+            "pattern_file": str(pattern_file),
+            "sequence_name": str(control_payload.get("sequence_name") or "").strip(),
+            "gender": str(control_payload.get("gender") or "").strip(),
+            "step_type": str(control_payload.get("step_type") or "").strip(),
+            "dancer_first_name": str(control_payload.get("dancer_first_name") or "").strip(),
+            "dancer_last_name": str(control_payload.get("dancer_last_name") or "").strip(),
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "control_payload": control_payload,
+        }
+        (run_root / "session_meta.json").write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
     def start_session(
         self,
         *,
@@ -155,8 +184,19 @@ class SessionRunner:
         print(f"[CONTROL] session_id={session_id} dance_id={dance_id} run_id={run_id}")
         print("[CONTROL] CMD", shlex.join(cmd))
 
+        self._write_session_meta(
+            session_id=session_id,
+            run_id=run_id,
+            dance_id=dance_id,
+            pattern_file=pattern_file,
+            control_payload=control_payload,
+        )
+
         child_env = dict(os.environ)
         child_env["PYTHONUNBUFFERED"] = "1"
+        creationflags = 0
+        if sys.platform == "win32":
+            creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
         self.proc = subprocess.Popen(
             cmd,
             cwd=str(PROJECT_ROOT),
@@ -165,6 +205,7 @@ class SessionRunner:
             text=True,
             bufsize=1,
             env=child_env,
+            creationflags=creationflags,
         )
         self.current_session_id = session_id
         self.current_run_id = run_id
@@ -185,12 +226,28 @@ class SessionRunner:
         assert self.proc is not None
         print(f"[CONTROL] STOP session_id={self.current_session_id} reason={reason}")
         try:
-            self.proc.send_signal(signal.SIGINT)
+            if sys.platform == "win32":
+                ctrl_break = getattr(signal, "CTRL_BREAK_EVENT", None)
+                if ctrl_break is not None:
+                    self.proc.send_signal(ctrl_break)
+                else:
+                    self.proc.terminate()
+            else:
+                self.proc.send_signal(signal.SIGINT)
             self.proc.wait(timeout=8)
         except subprocess.TimeoutExpired:
             print("[CONTROL][warn] Graceful stop timeout. Killing process.")
             self.proc.kill()
             self.proc.wait(timeout=3)
+        except Exception as exc:
+            print(f"[CONTROL][warn] Graceful stop failed ({exc}). Terminating process.")
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                print("[CONTROL][warn] Terminate timeout. Killing process.")
+                self.proc.kill()
+                self.proc.wait(timeout=3)
 
         code = self.proc.returncode
         print(f"[CONTROL] receiver_exit_code={code}")

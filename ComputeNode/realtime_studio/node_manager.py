@@ -18,6 +18,7 @@ from typing import Optional
 import uvicorn
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 
+from .analysis import build_run_analysis, list_analysis_runs
 from .compute_settings import ComputeNodeConfig, load_compute_config
 from .control_contracts import NodeSnapshot, ProcessStatus, SessionStartRequest, SessionStopRequest, WsEvent
 from .launch import build_backend_command, build_llm_command, extract_feedback_text
@@ -471,6 +472,20 @@ def create_app(cfg: ComputeNodeConfig | None = None) -> FastAPI:
     def session_stop(req: SessionStopRequest):
         payload = manager.stop_session(req)
         return {"sent": payload, "snapshot": manager.snapshot_data().model_dump()}
+
+    @app.get("/analysis/runs")
+    def analysis_runs():
+        return {"runs": list_analysis_runs(manager.cfg)}
+
+    @app.get("/analysis/run/{run_id}")
+    def analysis_run(run_id: str):
+        try:
+            payload = build_run_analysis(manager.cfg, run_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+        return payload
 
     @app.websocket("/ws/events")
     async def ws_events(websocket: WebSocket):

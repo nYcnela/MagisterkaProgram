@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from pathlib import Path
 import time
+from typing import Any
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -15,8 +15,9 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMainWindow,
-    QMessageBox,
     QPushButton,
     QScrollArea,
     QSpinBox,
@@ -27,6 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .analysis_view import AnalysisFigureWidget
 from .remote_client import RemoteNodeClient
 from .remote_settings import RemoteGuiConfig, load_remote_gui_config, save_remote_gui_config
 
@@ -49,6 +51,7 @@ class RemoteMainWindow(QMainWindow):
         super().__init__()
         self.cfg = load_remote_gui_config()
         self.client = RemoteNodeClient(self.cfg)
+        self._analysis_runs: list[dict[str, Any]] = []
         self._build_ui()
         self._bind_signals()
         self._load_into_widgets()
@@ -93,6 +96,7 @@ class RemoteMainWindow(QMainWindow):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(10)
         right_layout.addWidget(self._status_card())
+        right_layout.addWidget(self._analysis_card(), 1)
         right_layout.addWidget(self._feedback_card())
         right_layout.addWidget(self._log_card(), 1)
 
@@ -114,6 +118,7 @@ class RemoteMainWindow(QMainWindow):
             ),
             "Sesja",
         )
+        tabs.addTab(self._scroll_tab(self._analysis_controls_card()), "Analiza")
         tabs.addTab(self._scroll_tab(self._notes_card()), "Info")
         return tabs
 
@@ -241,6 +246,53 @@ class RemoteMainWindow(QMainWindow):
         layout.addWidget(hint)
         return card
 
+    def _analysis_controls_card(self) -> QWidget:
+        card, layout = self._card("Analiza runów")
+
+        filter_row = QHBoxLayout()
+        filter_row.setSpacing(10)
+
+        self.analysis_dance_filter = QComboBox()
+        self.analysis_dance_filter.addItem("Wszystkie tańce", "")
+        self.analysis_dance_filter.setMinimumWidth(220)
+
+        self.analysis_person_filter = QLineEdit()
+        self.analysis_person_filter.setPlaceholderText("Filtr osoby")
+
+        self.analysis_refresh_btn = QPushButton("Odśwież runy")
+
+        filter_row.addWidget(self.analysis_dance_filter, 1)
+        filter_row.addWidget(self.analysis_person_filter, 1)
+        layout.addLayout(filter_row)
+
+        self.analysis_runs_list = QListWidget()
+        self.analysis_runs_list.setMinimumHeight(250)
+        layout.addWidget(self.analysis_runs_list)
+
+        self.analysis_meta_label = QLabel("Wybierz run, aby przygotować analizę.")
+        self.analysis_meta_label.setObjectName("Hint")
+        self.analysis_meta_label.setWordWrap(True)
+        layout.addWidget(self.analysis_meta_label)
+
+        actions = QGridLayout()
+        actions.setHorizontalSpacing(10)
+        actions.setVerticalSpacing(10)
+        self.analysis_generate_btn = QPushButton("Generuj wykresy")
+        self.analysis_export_png_btn = QPushButton("Eksport PNG")
+        self.analysis_export_svg_btn = QPushButton("Eksport SVG")
+        self.analysis_export_csv_btn = QPushButton("Eksport CSV")
+        self.analysis_export_png_btn.setEnabled(False)
+        self.analysis_export_svg_btn.setEnabled(False)
+        self.analysis_export_csv_btn.setEnabled(False)
+
+        actions.addWidget(self.analysis_generate_btn, 0, 0)
+        actions.addWidget(self.analysis_refresh_btn, 0, 1)
+        actions.addWidget(self.analysis_export_png_btn, 1, 0)
+        actions.addWidget(self.analysis_export_svg_btn, 1, 1)
+        actions.addWidget(self.analysis_export_csv_btn, 2, 0, 1, 2)
+        layout.addLayout(actions)
+        return card
+
     def _actions_card(self) -> QFrame:
         card, layout = self._card("Akcje")
 
@@ -300,6 +352,12 @@ class RemoteMainWindow(QMainWindow):
         layout.addWidget(self.feedback_view)
         return card
 
+    def _analysis_card(self) -> QFrame:
+        card, layout = self._card("Analiza porównawcza")
+        self.analysis_chart = AnalysisFigureWidget()
+        layout.addWidget(self.analysis_chart, 1)
+        return card
+
     def _log_card(self) -> QFrame:
         card, layout = self._card("Log z K1")
         self.log_view = QTextEdit()
@@ -318,9 +376,19 @@ class RemoteMainWindow(QMainWindow):
         self.start_session_btn.clicked.connect(self._start_session_clicked)
         self.stop_session_btn.clicked.connect(lambda: self.client.stop_session({"reason": "remote_gui"}))
         self.save_btn.clicked.connect(self._save_clicked)
+        self.analysis_refresh_btn.clicked.connect(self.client.fetch_analysis_runs)
+        self.analysis_generate_btn.clicked.connect(self._analysis_generate_clicked)
+        self.analysis_export_png_btn.clicked.connect(self._export_analysis_png)
+        self.analysis_export_svg_btn.clicked.connect(self._export_analysis_svg)
+        self.analysis_export_csv_btn.clicked.connect(self._export_analysis_csv)
+        self.analysis_dance_filter.currentIndexChanged.connect(self._refilter_analysis_runs)
+        self.analysis_person_filter.textChanged.connect(self._refilter_analysis_runs)
+        self.analysis_runs_list.itemSelectionChanged.connect(self._update_analysis_meta)
 
         self.client.connection_changed.connect(self._on_connection_changed)
         self.client.snapshot_loaded.connect(self._apply_snapshot)
+        self.client.analysis_runs_loaded.connect(self._apply_analysis_runs)
+        self.client.analysis_loaded.connect(self._apply_analysis_payload)
         self.client.event_received.connect(self._apply_event)
         self.client.response.connect(self._on_response)
         self.client.error.connect(self._append_error)
@@ -415,6 +483,7 @@ class RemoteMainWindow(QMainWindow):
         self._set_pill(self.node_state_pill, state, details if state != "READY" else "")
         if state == "READY":
             self._append_log(f"[INFO] Połączono z ComputeNode: {details}")
+            self.client.fetch_analysis_runs()
         elif state in {"OFFLINE", "ERROR"}:
             self._append_log(f"[WARN] Połączenie z ComputeNode: {state} ({details})")
 
@@ -442,6 +511,7 @@ class RemoteMainWindow(QMainWindow):
                 self.run_id_label.setText(f"Run ID: {run_id}")
         elif kind == "session_stopped":
             self.session_label.setText("Sesja: -")
+            self.client.fetch_analysis_runs()
 
     def _on_response(self, tag: str, payload: dict) -> None:
         if "snapshot" in payload:
@@ -467,6 +537,103 @@ class RemoteMainWindow(QMainWindow):
             self.log_view.setPlainText("\n".join(logs))
             sb = self.log_view.verticalScrollBar()
             sb.setValue(sb.maximum())
+
+    def _apply_analysis_runs(self, payload: dict) -> None:
+        self._analysis_runs = list(payload.get("runs", [])) if isinstance(payload, dict) else []
+        current_value = self.analysis_dance_filter.currentData() or ""
+        options = sorted({str(item.get("dance_id") or "").strip() for item in self._analysis_runs if item.get("dance_id")})
+        self.analysis_dance_filter.blockSignals(True)
+        self.analysis_dance_filter.clear()
+        self.analysis_dance_filter.addItem("Wszystkie tańce", "")
+        for dance_id in options:
+            self.analysis_dance_filter.addItem(dance_id, dance_id)
+        index = self.analysis_dance_filter.findData(current_value)
+        self.analysis_dance_filter.setCurrentIndex(index if index >= 0 else 0)
+        self.analysis_dance_filter.blockSignals(False)
+        self._refilter_analysis_runs()
+        self._append_log(f"[INFO] Odebrano listę runów: {len(self._analysis_runs)}")
+
+    def _refilter_analysis_runs(self) -> None:
+        selected_run_id = self._selected_analysis_run_id()
+        dance_filter = str(self.analysis_dance_filter.currentData() or "").strip()
+        person_filter = self.analysis_person_filter.text().strip().lower()
+
+        self.analysis_runs_list.clear()
+        for item in self._analysis_runs:
+            dance_id = str(item.get("dance_id") or "").strip()
+            dancer_name = str(item.get("dancer_name") or "").strip()
+            if dance_filter and dance_id != dance_filter:
+                continue
+            if person_filter and person_filter not in dancer_name.lower():
+                continue
+            created_at = str(item.get("created_at") or "-")
+            label = f"{created_at} | {dance_id or '-'} | {dancer_name or 'bez osoby'} | {item.get('run_id', '-') }"
+            row = QListWidgetItem(label)
+            row.setData(Qt.ItemDataRole.UserRole, dict(item))
+            self.analysis_runs_list.addItem(row)
+
+        if self.analysis_runs_list.count() == 0:
+            self.analysis_meta_label.setText("Brak runów pasujących do filtrów.")
+            return
+
+        for idx in range(self.analysis_runs_list.count()):
+            row = self.analysis_runs_list.item(idx)
+            item = row.data(Qt.ItemDataRole.UserRole) or {}
+            if str(item.get("run_id") or "") == selected_run_id:
+                self.analysis_runs_list.setCurrentRow(idx)
+                break
+        else:
+            self.analysis_runs_list.setCurrentRow(0)
+        self._update_analysis_meta()
+
+    def _selected_analysis_run_id(self) -> str:
+        item = self.analysis_runs_list.currentItem()
+        if item is None:
+            return ""
+        payload = item.data(Qt.ItemDataRole.UserRole) or {}
+        return str(payload.get("run_id") or "")
+
+    def _update_analysis_meta(self) -> None:
+        item = self.analysis_runs_list.currentItem()
+        if item is None:
+            self.analysis_meta_label.setText("Wybierz run, aby przygotować analizę.")
+            return
+        payload = item.data(Qt.ItemDataRole.UserRole) or {}
+        self.analysis_meta_label.setText(
+            f"Run: {payload.get('run_id', '-')}\n"
+            f"Taniec: {payload.get('dance_id', '-')} | Osoba: {payload.get('dancer_name', 'brak')}\n"
+            f"Okna: {payload.get('window_count', 0)} | Feedback: {payload.get('feedback_count', 0)}"
+        )
+
+    def _analysis_generate_clicked(self) -> None:
+        run_id = self._selected_analysis_run_id()
+        if not run_id:
+            self.analysis_chart.set_message("Najpierw wybierz run z listy.")
+            return
+        self.analysis_chart.set_message(f"Ładowanie analizy dla {run_id} ...")
+        self.client.fetch_analysis_run(run_id)
+
+    def _apply_analysis_payload(self, payload: dict) -> None:
+        self.analysis_chart.render_analysis(payload)
+        enabled = self.analysis_chart.has_data()
+        self.analysis_export_png_btn.setEnabled(enabled)
+        self.analysis_export_svg_btn.setEnabled(enabled)
+        self.analysis_export_csv_btn.setEnabled(payload is not None)
+        run_meta = dict(payload.get("run", {})) if isinstance(payload, dict) else {}
+        run_id = run_meta.get("run_id", "-")
+        self._append_log(f"[INFO] Wygenerowano analizę dla runu: {run_id}")
+
+    def _export_analysis_png(self) -> None:
+        if self.analysis_chart.export_png():
+            self._append_log("[INFO] Zapisano wykresy PNG.")
+
+    def _export_analysis_svg(self) -> None:
+        if self.analysis_chart.export_svg():
+            self._append_log("[INFO] Zapisano wykresy SVG.")
+
+    def _export_analysis_csv(self) -> None:
+        if self.analysis_chart.export_csv():
+            self._append_log("[INFO] Zapisano dane CSV z analizy.")
 
     def _append_error(self, message: str) -> None:
         self._append_log(f"[ERROR] {message}")

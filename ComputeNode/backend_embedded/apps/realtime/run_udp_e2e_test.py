@@ -213,6 +213,39 @@ def _model_input_from_stage7_file(
     )
 
 
+def _window_bundle_from_stage7_file(
+    *,
+    stage7_path: Path,
+    pattern_data: Any,
+    manifest: Dict[str, Any],
+    default_window_seconds: float,
+    desc_module: ModuleType,
+    z_threshold: float = LIVE_DESC_Z_THRESHOLD,
+    major_order_threshold: int = LIVE_MAJOR_ORDER_THRESHOLD,
+    emit_minor_order_text: bool = LIVE_EMIT_MINOR_ORDER_TEXT,
+) -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, str]]:
+    stage7_data = json.loads(stage7_path.read_text(encoding="utf-8"))
+    window_id = int(manifest.get("window_index", 0))
+    window_start = float(manifest.get("start_s", 0.0))
+    window_end = float(manifest.get("end_s", window_start + default_window_seconds))
+
+    window_record = build_window_record(
+        stage7_data,
+        pattern_data,
+        window_id=window_id,
+        window_start=window_start,
+        window_end=window_end,
+    )
+    model_input = _window_record_to_model_input(
+        window_record,
+        desc_module,
+        z_threshold=z_threshold,
+        major_order_threshold=major_order_threshold,
+        emit_minor_order_text=emit_minor_order_text,
+    )
+    return stage7_data, window_record, model_input
+
+
 
 def _call_llm_server(llm_url: str, rec: Dict[str, Any], timeout_s: float = 30.0) -> Optional[Dict]:
     """
@@ -608,9 +641,12 @@ def main() -> int:
             model_inputs_path = (PROJECT_ROOT / model_inputs_path).resolve()
 
     dirs_to_make = [raw_root, offline_runs_root]
+    analysis_stage7_root = run_root / "analysis" / "stage7"
+    analysis_window_records_root = run_root / "analysis" / "window_records" / pattern_name / "windows"
     if args.model_inputs_only:
         assert model_inputs_path is not None
         dirs_to_make.append(model_inputs_path.parent)
+        dirs_to_make.extend([analysis_stage7_root, analysis_window_records_root])
     else:
         dirs_to_make.extend([prompt_windows_root, prompt_desc_root])
 
@@ -686,7 +722,7 @@ def main() -> int:
                 try:
                     stage7_path, stage_timings = stage7_pipeline(src_csv)
 
-                    rec = _model_input_from_stage7_file(
+                    stage7_data, window_record, rec = _window_bundle_from_stage7_file(
                         stage7_path=stage7_path,
                         pattern_data=pattern_data,
                         manifest=manifest,
@@ -695,6 +731,16 @@ def main() -> int:
                         z_threshold=float(args.live_z_threshold),
                         major_order_threshold=int(args.live_major_order_threshold),
                         emit_minor_order_text=bool(args.live_emit_minor_order_text),
+                    )
+                    analysis_stage7_path = analysis_stage7_root / f"{stem}.json"
+                    analysis_window_path = analysis_window_records_root / f"{stem}.json"
+                    analysis_stage7_path.write_text(
+                        json.dumps(stage7_data, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+                    analysis_window_path.write_text(
+                        json.dumps(window_record, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
                     )
                     with output_lock:
                         with model_inputs_path.open("a", encoding="utf-8") as out_f:
