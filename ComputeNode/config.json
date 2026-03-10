@@ -25,9 +25,9 @@
   "live_z_threshold": 1.7,
   "live_major_order_threshold": 60,
   "live_emit_minor_order_text": false,
-  "output_root": "data/tmp/realtime_e2e",
-  "candidate_root": "data/tmp/realtime_candidate",
-  "offline_runs_root": "data/tmp/offline_runs",
+  "output_root": "../runtime/realtime_e2e",
+  "candidate_root": "../runtime/realtime_candidate",
+  "offline_runs_root": "../runtime/offline_runs",
   "session_mode": true,
   "auto_control_port": true,
   "auto_detect_dance": false

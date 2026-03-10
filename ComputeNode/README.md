@@ -67,6 +67,7 @@ Domyslny uklad:
 - backend control: `5006`
 - LLM lokalnie: `127.0.0.1:8000`
 - API managera: `8010`
+- dane runtime: `runtime/realtime_e2e`, `runtime/realtime_candidate`, `runtime/offline_runs`
 
 ## Jak to dziala
 
