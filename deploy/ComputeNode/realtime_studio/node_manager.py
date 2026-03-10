@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import deque
+from contextlib import asynccontextmanager
 import json
 import os
 from pathlib import Path
@@ -360,16 +361,17 @@ class ComputeNodeManager:
 
 def create_app(cfg: ComputeNodeConfig | None = None) -> FastAPI:
     manager = ComputeNodeManager(cfg or load_compute_config())
-    app = FastAPI(title="Realtime Compute Node")
-    app.state.manager = manager
-
-    @app.on_event("startup")
-    async def _startup() -> None:
+    
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
         manager._hub.bind_loop(asyncio.get_running_loop())
+        try:
+            yield
+        finally:
+            manager.shutdown()
 
-    @app.on_event("shutdown")
-    async def _shutdown() -> None:
-        manager.shutdown()
+    app = FastAPI(title="Realtime Compute Node", lifespan=lifespan)
+    app.state.manager = manager
 
     @app.get("/health")
     def health():
@@ -428,4 +430,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

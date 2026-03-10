@@ -89,10 +89,14 @@ Po wygenerowaniu pojawia sie katalog:
 
 W `ComputeNode` i `RemoteGUI` dostajesz:
 
-- `1_INSTALUJ.bat`
-- `2_KONFIGURACJA.bat`
-- `3_START.bat`
+- podfolder `windows/` ze skryptami `.bat`
+- podfolder `mac/` ze skryptami `.sh`
 - lokalny plik `config.json` dla danej roli
+
+Na macOS:
+
+- uruchom `chmod +x mac/*.sh`
+- potem odpalaj skrypty jako `./setup_remote_gui.sh` albo `./start_remote_gui.sh`
 
 Model pracy:
 

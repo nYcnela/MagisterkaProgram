@@ -19,6 +19,8 @@ FULL_APP_DIR = "FullApp"
 COMPUTE_NODE_DIR = "ComputeNode"
 REMOTE_GUI_DIR = "RemoteGUI"
 LEGACY_DIRS = ("ComputeNode_K1", "RemoteGUI_K2")
+WINDOWS_DIR = "windows"
+MAC_DIR = "mac"
 
 
 def _remove(path: Path) -> None:
@@ -53,6 +55,11 @@ def _mark_executable(path: Path) -> None:
     path.chmod(mode | 0o111)
 
 
+def _write_executable_text(path: Path, content: str) -> None:
+    _write_text(path, content)
+    _mark_executable(path)
+
+
 def _full_app_dist() -> None:
     out = DIST_ROOT / FULL_APP_DIR
     _remove(out)
@@ -76,7 +83,9 @@ def _full_app_dist() -> None:
 def _compute_node_install_bat() -> str:
     return r"""@echo off
 chcp 65001 >nul 2>&1
-cd /d "%~dp0"
+set "SCRIPT_DIR=%~dp0"
+for %%I in ("%SCRIPT_DIR%..") do set "ROOT_DIR=%%~fI"
+cd /d "%ROOT_DIR%"
 
 set "TORCH_CHANNEL=%REALTIME_STUDIO_TORCH_CHANNEL%"
 if not defined TORCH_CHANNEL set "TORCH_CHANNEL=cu130"
@@ -130,70 +139,116 @@ pause
 def _compute_node_start_bat() -> str:
     return r"""@echo off
 chcp 65001 >nul 2>&1
-cd /d "%~dp0"
+set "SCRIPT_DIR=%~dp0"
+for %%I in ("%SCRIPT_DIR%..") do set "ROOT_DIR=%%~fI"
+cd /d "%ROOT_DIR%"
 
 if not exist ".venv\Scripts\python.exe" (
-    echo [BLAD] Brak .venv — uruchom najpierw 1_INSTALUJ.bat
+    echo [BLAD] Brak .venv — uruchom najpierw windows\setup_compute_node.bat
     pause
     exit /b 1
 )
 
 call .venv\Scripts\activate.bat
-set REALTIME_STUDIO_BACKEND_ROOT=%~dp0backend_embedded
-set REALTIME_COMPUTE_CONFIG=%~dp0config.json
+set REALTIME_STUDIO_BACKEND_ROOT=%ROOT_DIR%\backend_embedded
+set REALTIME_COMPUTE_CONFIG=%ROOT_DIR%\config.json
 python -m realtime_studio.node_manager
 """
 
 
-def _compute_node_install_command() -> str:
-    return """#!/bin/zsh
-set -e
-cd "$(dirname "$0")"
+def _compute_node_setup_sh() -> str:
+    return """#!/bin/bash
+set -euo pipefail
 
-if [ ! -x ".venv/bin/python" ]; then
-  echo "[1/5] Tworzenie .venv ..."
-  python3 -m venv .venv
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT_DIR"
+
+echo "========================================"
+echo "  ComputeNode - Pierwsza instalacja"
+echo "========================================"
+echo ""
+
+if ! command -v python3 >/dev/null 2>&1; then
+    echo "[BLAD] Nie znaleziono python3."
+    exit 1
+fi
+
+TORCH_CHANNEL="${REALTIME_STUDIO_TORCH_CHANNEL:-}"
+if [ -z "$TORCH_CHANNEL" ]; then
+    case "$(uname -s)" in
+        Darwin)
+            TORCH_CHANNEL="default"
+            ;;
+        *)
+            TORCH_CHANNEL="cu130"
+            ;;
+    esac
+fi
+TORCH_FALLBACK_CHANNEL="cu128"
+
+if [ -f ".venv/bin/python" ]; then
+    echo "[INFO] .venv juz istnieje, pomijam tworzenie."
+else
+    echo "[1/5] Tworzenie srodowiska .venv ..."
+    python3 -m venv .venv
 fi
 
 source .venv/bin/activate
-
-TORCH_CHANNEL="${REALTIME_STUDIO_TORCH_CHANNEL:-cu130}"
-TORCH_FALLBACK_CHANNEL="cu128"
-TORCH_INDEX_URL="https://download.pytorch.org/whl/${TORCH_CHANNEL}"
-TORCH_FALLBACK_INDEX_URL="https://download.pytorch.org/whl/${TORCH_FALLBACK_CHANNEL}"
 
 echo "[2/5] Aktualizacja pip ..."
 python -m pip install -U pip setuptools wheel
 
-echo "[3/5] Instalacja GPU PyTorch ..."
-python -m pip install --upgrade --force-reinstall --no-cache-dir torch torchvision torchaudio --index-url "${TORCH_INDEX_URL}" || \\
-python -m pip install --upgrade --force-reinstall --no-cache-dir torch torchvision torchaudio --index-url "${TORCH_FALLBACK_INDEX_URL}"
+install_torch_channel() {
+    local channel="$1"
+    local index_url="https://download.pytorch.org/whl/${channel}"
+    python -m pip install --upgrade --force-reinstall --no-cache-dir torch torchvision torchaudio --index-url "${index_url}"
+}
+
+echo "[3/5] Instalacja PyTorch ..."
+if [ "$TORCH_CHANNEL" = "default" ]; then
+    python -m pip install --upgrade --force-reinstall --no-cache-dir torch torchvision torchaudio
+else
+    if ! install_torch_channel "$TORCH_CHANNEL"; then
+        if [ "$TORCH_CHANNEL" = "$TORCH_FALLBACK_CHANNEL" ]; then
+            echo "[BLAD] Instalacja PyTorch z kanalu ${TORCH_CHANNEL} nie powiodla sie."
+            exit 1
+        fi
+        echo "[WARN] Fallback do ${TORCH_FALLBACK_CHANNEL} ..."
+        install_torch_channel "$TORCH_FALLBACK_CHANNEL"
+    fi
+fi
 
 echo "[4/5] Instalacja zaleznosci ComputeNode ..."
 python -m pip install -r requirements.compute_node.txt
 
-echo "[5/5] Instalacja bitsandbytes ..."
-python -m pip install "bitsandbytes>=0.48,<1"
+if [ "$(uname -s)" != "Darwin" ]; then
+    echo "[5/5] Instalacja bitsandbytes ..."
+    python -m pip install "bitsandbytes>=0.48,<1"
+else
+    echo "[5/5] bitsandbytes pomijam na macOS."
+fi
 
+echo ""
 echo "GOTOWE"
-read -k 1 "?Nacisnij dowolny klawisz, aby zamknac..."
 """
 
 
-def _compute_node_start_command() -> str:
-    return """#!/bin/zsh
-set -e
-cd "$(dirname "$0")"
+def _compute_node_start_sh() -> str:
+    return """#!/bin/bash
+set -euo pipefail
 
-if [ ! -x ".venv/bin/python" ]; then
-  echo "[BLAD] Brak .venv — uruchom najpierw 1_INSTALUJ.command"
-  read -k 1 "?Nacisnij dowolny klawisz, aby zamknac..."
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT_DIR"
+
+if [ ! -f ".venv/bin/python" ]; then
+  echo "[BLAD] Brak .venv — uruchom najpierw mac/setup_compute_node.sh"
   exit 1
 fi
 
 source .venv/bin/activate
-export REALTIME_STUDIO_BACKEND_ROOT="$PWD/backend_embedded"
-export REALTIME_COMPUTE_CONFIG="$PWD/config.json"
+export REALTIME_STUDIO_BACKEND_ROOT="$ROOT_DIR/backend_embedded"
+export REALTIME_COMPUTE_CONFIG="$ROOT_DIR/config.json"
+echo "[INFO] Uruchamianie ComputeNode ..."
 python -m realtime_studio.node_manager
 """
 
@@ -201,7 +256,9 @@ python -m realtime_studio.node_manager
 def _remote_gui_install_bat() -> str:
     return r"""@echo off
 chcp 65001 >nul 2>&1
-cd /d "%~dp0"
+set "SCRIPT_DIR=%~dp0"
+for %%I in ("%SCRIPT_DIR%..") do set "ROOT_DIR=%%~fI"
+cd /d "%ROOT_DIR%"
 
 if not exist ".venv\Scripts\python.exe" (
     echo [1/3] Tworzenie .venv ...
@@ -229,28 +286,44 @@ pause
 def _remote_gui_start_bat() -> str:
     return r"""@echo off
 chcp 65001 >nul 2>&1
-cd /d "%~dp0"
+set "SCRIPT_DIR=%~dp0"
+for %%I in ("%SCRIPT_DIR%..") do set "ROOT_DIR=%%~fI"
+cd /d "%ROOT_DIR%"
 
 if not exist ".venv\Scripts\python.exe" (
-    echo [BLAD] Brak .venv — uruchom najpierw 1_INSTALUJ.bat
+    echo [BLAD] Brak .venv — uruchom najpierw windows\setup_remote_gui.bat
     pause
     exit /b 1
 )
 
 call .venv\Scripts\activate.bat
-set REALTIME_REMOTE_GUI_CONFIG=%~dp0config.json
+set REALTIME_REMOTE_GUI_CONFIG=%ROOT_DIR%\config.json
 python -m realtime_studio.remote_main
 """
 
 
-def _remote_gui_install_command() -> str:
-    return """#!/bin/zsh
-set -e
-cd "$(dirname "$0")"
+def _remote_gui_setup_sh() -> str:
+    return """#!/bin/bash
+set -euo pipefail
 
-if [ ! -x ".venv/bin/python" ]; then
-  echo "[1/3] Tworzenie .venv ..."
-  python3 -m venv .venv
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT_DIR"
+
+echo "========================================"
+echo "  RemoteGUI - Pierwsza instalacja"
+echo "========================================"
+echo ""
+
+if ! command -v python3 >/dev/null 2>&1; then
+    echo "[BLAD] Nie znaleziono python3."
+    exit 1
+fi
+
+if [ -f ".venv/bin/python" ]; then
+    echo "[INFO] .venv juz istnieje, pomijam tworzenie."
+else
+    echo "[1/3] Tworzenie srodowiska .venv ..."
+    python3 -m venv .venv
 fi
 
 source .venv/bin/activate
@@ -261,24 +334,26 @@ python -m pip install -U pip setuptools wheel
 echo "[3/3] Instalacja zaleznosci RemoteGUI ..."
 python -m pip install -r requirements.remote_gui.txt
 
+echo ""
 echo "GOTOWE"
-read -k 1 "?Nacisnij dowolny klawisz, aby zamknac..."
 """
 
 
-def _remote_gui_start_command() -> str:
-    return """#!/bin/zsh
-set -e
-cd "$(dirname "$0")"
+def _remote_gui_start_sh() -> str:
+    return """#!/bin/bash
+set -euo pipefail
 
-if [ ! -x ".venv/bin/python" ]; then
-  echo "[BLAD] Brak .venv — uruchom najpierw 1_INSTALUJ.command"
-  read -k 1 "?Nacisnij dowolny klawisz, aby zamknac..."
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT_DIR"
+
+if [ ! -f ".venv/bin/python" ]; then
+  echo "[BLAD] Brak .venv — uruchom najpierw mac/setup_remote_gui.sh"
   exit 1
 fi
 
 source .venv/bin/activate
-export REALTIME_REMOTE_GUI_CONFIG="$PWD/config.json"
+export REALTIME_REMOTE_GUI_CONFIG="$ROOT_DIR/config.json"
+echo "[INFO] Uruchamianie RemoteGUI ..."
 python -m realtime_studio.remote_main
 """
 
@@ -288,28 +363,30 @@ def _write_open_config_bat(path: Path, config_name: str) -> None:
         path,
         f"""@echo off
 chcp 65001 >nul 2>&1
-cd /d "%~dp0"
-start "" notepad "{config_name}"
+set "SCRIPT_DIR=%~dp0"
+for %%I in ("%SCRIPT_DIR%..") do set "ROOT_DIR=%%~fI"
+start "" notepad "%ROOT_DIR%\\{config_name}"
 """,
     )
 
 
-def _write_open_config_command(path: Path, config_name: str) -> None:
-    _write_text(
+def _write_open_config_sh(path: Path, config_name: str) -> None:
+    _write_executable_text(
         path,
-        f"""#!/bin/zsh
-set -e
-cd "$(dirname "$0")"
-open -a TextEdit "{config_name}"
+        f"""#!/bin/bash
+set -euo pipefail
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+open -a TextEdit "$ROOT_DIR/{config_name}"
 """,
     )
-    _mark_executable(path)
 
 
 def _compute_node_dist() -> None:
     out = DIST_ROOT / COMPUTE_NODE_DIR
     _remove(out)
     out.mkdir(parents=True, exist_ok=True)
+    windows_dir = out / WINDOWS_DIR
+    mac_dir = out / MAC_DIR
 
     _copy_file(PROJECT_ROOT / "README.md", out / "README.md")
     _copy_file(PROJECT_ROOT / "requirements.compute_node.txt", out / "requirements.compute_node.txt")
@@ -317,34 +394,32 @@ def _compute_node_dist() -> None:
     _copy_tree(PROJECT_ROOT / "realtime_studio", out / "realtime_studio")
 
     _write_json(out / "config.json", asdict(ComputeNodeConfig()))
-    _write_text(out / "1_INSTALUJ.bat", _compute_node_install_bat())
-    _write_open_config_bat(out / "2_KONFIGURACJA.bat", "config.json")
-    _write_text(out / "3_START.bat", _compute_node_start_bat())
-    _write_text(out / "1_INSTALUJ.command", _compute_node_install_command())
-    _mark_executable(out / "1_INSTALUJ.command")
-    _write_open_config_command(out / "2_KONFIGURACJA.command", "config.json")
-    _write_text(out / "3_START.command", _compute_node_start_command())
-    _mark_executable(out / "3_START.command")
+    _write_text(windows_dir / "setup_compute_node.bat", _compute_node_install_bat())
+    _write_open_config_bat(windows_dir / "configure_compute_node.bat", "config.json")
+    _write_text(windows_dir / "start_compute_node.bat", _compute_node_start_bat())
+    _write_executable_text(mac_dir / "setup_compute_node.sh", _compute_node_setup_sh())
+    _write_open_config_sh(mac_dir / "configure_compute_node.sh", "config.json")
+    _write_executable_text(mac_dir / "start_compute_node.sh", _compute_node_start_sh())
 
 
 def _remote_gui_dist() -> None:
     out = DIST_ROOT / REMOTE_GUI_DIR
     _remove(out)
     out.mkdir(parents=True, exist_ok=True)
+    windows_dir = out / WINDOWS_DIR
+    mac_dir = out / MAC_DIR
 
     _copy_file(PROJECT_ROOT / "README.md", out / "README.md")
     _copy_file(PROJECT_ROOT / "requirements.remote_gui.txt", out / "requirements.remote_gui.txt")
     _copy_tree(PROJECT_ROOT / "realtime_studio", out / "realtime_studio")
 
     _write_json(out / "config.json", asdict(RemoteGuiConfig()))
-    _write_text(out / "1_INSTALUJ.bat", _remote_gui_install_bat())
-    _write_open_config_bat(out / "2_KONFIGURACJA.bat", "config.json")
-    _write_text(out / "3_START.bat", _remote_gui_start_bat())
-    _write_text(out / "1_INSTALUJ.command", _remote_gui_install_command())
-    _mark_executable(out / "1_INSTALUJ.command")
-    _write_open_config_command(out / "2_KONFIGURACJA.command", "config.json")
-    _write_text(out / "3_START.command", _remote_gui_start_command())
-    _mark_executable(out / "3_START.command")
+    _write_text(windows_dir / "setup_remote_gui.bat", _remote_gui_install_bat())
+    _write_open_config_bat(windows_dir / "configure_remote_gui.bat", "config.json")
+    _write_text(windows_dir / "start_remote_gui.bat", _remote_gui_start_bat())
+    _write_executable_text(mac_dir / "setup_remote_gui.sh", _remote_gui_setup_sh())
+    _write_open_config_sh(mac_dir / "configure_remote_gui.sh", "config.json")
+    _write_executable_text(mac_dir / "start_remote_gui.sh", _remote_gui_start_sh())
 
 
 def main() -> int:
