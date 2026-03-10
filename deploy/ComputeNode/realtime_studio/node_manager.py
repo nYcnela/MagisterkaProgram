@@ -92,6 +92,7 @@ class ComputeNodeManager:
         self._llm_proc: Optional[subprocess.Popen[str]] = None
         self._backend_thread: Optional[threading.Thread] = None
         self._llm_thread: Optional[threading.Thread] = None
+        self._llm_external = False
 
         self._health_thread = threading.Thread(target=self._health_loop, name="llm-health", daemon=True)
         self._health_thread.start()
@@ -208,6 +209,34 @@ class ComputeNodeManager:
             details = "" if code == 0 else f"exit={code}"
         self._set_process_status(kind, state, details, None)
 
+    def _connect_host(self, host: str) -> str:
+        clean = host.strip()
+        if clean in {"", "0.0.0.0", "::"}:
+            return "127.0.0.1"
+        return clean
+
+    def _probe_llm_health(self, timeout: float = 0.4) -> dict | None:
+        url = f"http://{self._connect_host(self.cfg.llm_host)}:{self.cfg.llm_port}/health"
+        try:
+            from urllib import request
+
+            req = request.Request(url, method="GET")
+            with request.urlopen(req, timeout=timeout) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except Exception:
+            return None
+
+    def _port_in_use(self, host: str, port: int, timeout: float = 0.2) -> bool:
+        target_host = self._connect_host(host)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        try:
+            return sock.connect_ex((target_host, int(port))) == 0
+        except Exception:
+            return False
+        finally:
+            sock.close()
+
     def _spawn(self, kind: str, program: str, args: list[str], cwd: Path) -> None:
         env = dict(os.environ)
         env["PYTHONUNBUFFERED"] = "1"
@@ -239,16 +268,41 @@ class ComputeNodeManager:
             if self._llm_proc is not None and self._llm_proc.poll() is None:
                 return
         cfg = self._studio_cfg()
+        existing = self._probe_llm_health(timeout=0.6)
+        if existing is not None:
+            self._llm_external = True
+            loaded = bool(existing.get("model_loaded", False))
+            details = "existing server" if loaded else "existing server loading"
+            pid = existing.get("pid") if isinstance(existing.get("pid"), int) else None
+            self._append_log("node", f"LLM already responding on {cfg.llm_host}:{cfg.llm_port}; reusing existing server.")
+            self._set_process_status("llm", "READY" if loaded else "STARTING", details, pid)
+            return
+        if self._port_in_use(cfg.llm_host, int(cfg.llm_port)):
+            self._append_log("node", f"Cannot start LLM: port {cfg.llm_port} is already in use.")
+            self._set_process_status("llm", "ERROR", f"port {cfg.llm_port} busy", None)
+            return
         program, args, backend_root = build_llm_command(cfg)
+        self._llm_external = False
         self._append_log("node", f"Starting LLM on {cfg.llm_host}:{cfg.llm_port}")
         self._spawn("llm", program, args, backend_root)
 
     def stop_llm(self) -> None:
         with self._lock:
             proc = self._llm_proc
+            external = self._llm_external
         if proc is None or proc.poll() is not None:
+            if external:
+                existing = self._probe_llm_health(timeout=0.3)
+                if existing is not None:
+                    loaded = bool(existing.get("model_loaded", False))
+                    pid = existing.get("pid") if isinstance(existing.get("pid"), int) else None
+                    self._append_log("node", "LLM is provided by an external server; stop skipped.")
+                    self._set_process_status("llm", "READY" if loaded else "STARTING", "external server", pid)
+                    return
+                self._llm_external = False
             self._set_process_status("llm", "STOPPED", "")
             return
+        self._llm_external = False
         self._append_log("node", "Stopping LLM")
         _kill_process_tree(proc)
 
@@ -323,22 +377,26 @@ class ComputeNodeManager:
         while not self._stop_event.wait(0.8):
             with self._lock:
                 llm_proc = self._llm_proc
-            if llm_proc is None or llm_proc.poll() is not None:
+                external = self._llm_external
+            if (llm_proc is None or llm_proc.poll() is not None) and not external:
                 continue
 
-            url = f"http://{self.cfg.llm_host}:{self.cfg.llm_port}/health"
-            try:
-                from urllib import request
-
-                req = request.Request(url, method="GET")
-                with request.urlopen(req, timeout=0.4) as resp:
-                    payload = json.loads(resp.read().decode("utf-8"))
+            payload = self._probe_llm_health(timeout=0.4)
+            if payload is not None:
                 loaded = bool(payload.get("model_loaded", False))
-                if loaded:
-                    self._set_process_status("llm", "READY", "model loaded", llm_proc.pid)
+                pid = payload.get("pid") if isinstance(payload.get("pid"), int) else None
+                if external:
+                    details = "external server" if loaded else "external server loading"
                 else:
-                    self._set_process_status("llm", "STARTING", "loading model", llm_proc.pid)
-            except Exception:
+                    details = "model loaded" if loaded else "loading model"
+                    if pid is None and llm_proc is not None:
+                        pid = llm_proc.pid
+                self._set_process_status("llm", "READY" if loaded else "STARTING", details, pid)
+            elif external:
+                with self._lock:
+                    self._llm_external = False
+                self._set_process_status("llm", "STOPPED", "")
+            elif llm_proc is not None and llm_proc.poll() is None:
                 self._set_process_status("llm", "STARTING", "booting", llm_proc.pid)
 
     async def ws_events(self, websocket: WebSocket) -> None:
@@ -424,6 +482,10 @@ def create_app(cfg: ComputeNodeConfig | None = None) -> FastAPI:
 def main() -> int:
     cfg = load_compute_config()
     app = create_app(cfg)
+    print("[NODE] ComputeNode READY", flush=True)
+    print(f"[NODE] HTTP health: http://{cfg.manager_host}:{cfg.manager_port}/health", flush=True)
+    print(f"[NODE] WebSocket: ws://{cfg.manager_host}:{cfg.manager_port}/ws/events", flush=True)
+    print("[NODE] Backend i LLM uruchamiasz z RemoteGUI.", flush=True)
     uvicorn.run(app, host=cfg.manager_host, port=cfg.manager_port, log_level="warning")
     return 0
 

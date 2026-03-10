@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDoubleSpinBox,
     QFormLayout,
     QFrame,
     QGridLayout,
@@ -103,19 +104,29 @@ class RemoteMainWindow(QMainWindow):
 
     def _tabs_panel(self) -> QTabWidget:
         tabs = QTabWidget()
+        tabs.setObjectName("ConfigTabs")
         tabs.addTab(self._scroll_tab(self._connection_card()), "Połączenie")
-        tabs.addTab(self._scroll_tab(self._session_card()), "Sesja")
+        tabs.addTab(
+            self._scroll_tab(
+                self._session_card(),
+                self._participant_card(),
+                self._thresholds_card(),
+            ),
+            "Sesja",
+        )
         tabs.addTab(self._scroll_tab(self._notes_card()), "Info")
         return tabs
 
-    def _scroll_tab(self, content: QWidget) -> QScrollArea:
+    def _scroll_tab(self, *contents: QWidget) -> QScrollArea:
         area = QScrollArea()
         area.setWidgetResizable(True)
         area.setFrameShape(QFrame.Shape.NoFrame)
         host = QWidget()
         layout = QVBoxLayout(host)
         layout.setContentsMargins(0, 2, 0, 0)
-        layout.addWidget(content)
+        layout.setSpacing(10)
+        for content in contents:
+            layout.addWidget(content)
         layout.addStretch(1)
         area.setWidget(host)
         return area
@@ -173,12 +184,46 @@ class RemoteMainWindow(QMainWindow):
         self.gender_combo.addItems(["female", "male"])
         self.step_type_combo = QComboBox()
         self.step_type_combo.addItems(["step", "static"])
-        self.auto_start_llm_check = QCheckBox("Uruchom LLM przed backendem")
 
         form.addRow("ID tańca", self.dance_id_combo)
         form.addRow("Nazwa sekwencji", self.sequence_name_edit)
         form.addRow("Płeć", self.gender_combo)
         form.addRow("Typ kroku", self.step_type_combo)
+
+        layout.addLayout(form)
+        return card
+
+    def _participant_card(self) -> QWidget:
+        card, layout = self._card("Osoba")
+        form = self._new_form()
+
+        self.dancer_first_name_edit = QLineEdit()
+        self.dancer_first_name_edit.setPlaceholderText("np. Jan")
+        self.dancer_last_name_edit = QLineEdit()
+        self.dancer_last_name_edit.setPlaceholderText("np. Kowalski")
+
+        form.addRow("Imię", self.dancer_first_name_edit)
+        form.addRow("Nazwisko", self.dancer_last_name_edit)
+
+        layout.addLayout(form)
+        return card
+
+    def _thresholds_card(self) -> QWidget:
+        card, layout = self._card("Progi Live")
+        form = self._new_form()
+
+        self.live_z_spin = QDoubleSpinBox()
+        self.live_z_spin.setRange(0.0, 10.0)
+        self.live_z_spin.setDecimals(2)
+        self.live_z_spin.setSingleStep(0.1)
+
+        self.live_order_spin = QSpinBox()
+        self.live_order_spin.setRange(0, 1000)
+
+        self.auto_start_llm_check = QCheckBox("Uruchom LLM przed backendem")
+
+        form.addRow("Próg Z", self.live_z_spin)
+        form.addRow("Próg kolejności", self.live_order_spin)
         form.addRow("", self.auto_start_llm_check)
 
         layout.addLayout(form)
@@ -285,10 +330,14 @@ class RemoteMainWindow(QMainWindow):
             node_host=self.node_host_edit.text().strip(),
             node_port=int(self.node_port_spin.value()),
             auto_connect=bool(self.auto_connect_check.isChecked()),
+            dancer_first_name=self.dancer_first_name_edit.text().strip(),
+            dancer_last_name=self.dancer_last_name_edit.text().strip(),
             dance_id=self.dance_id_combo.currentText().strip(),
             sequence_name=self.sequence_name_edit.text().strip(),
             gender=self.gender_combo.currentText(),
             step_type=self.step_type_combo.currentText(),
+            live_z_threshold=float(self.live_z_spin.value()),
+            live_major_order_threshold=int(self.live_order_spin.value()),
             auto_start_llm=bool(self.auto_start_llm_check.isChecked()),
         )
 
@@ -296,10 +345,14 @@ class RemoteMainWindow(QMainWindow):
         self.node_host_edit.setText(self.cfg.node_host)
         self.node_port_spin.setValue(self.cfg.node_port)
         self.auto_connect_check.setChecked(self.cfg.auto_connect)
+        self.dancer_first_name_edit.setText(self.cfg.dancer_first_name)
+        self.dancer_last_name_edit.setText(self.cfg.dancer_last_name)
         self.dance_id_combo.setCurrentText(self.cfg.dance_id)
         self.sequence_name_edit.setText(self.cfg.sequence_name)
         self.gender_combo.setCurrentText(self.cfg.gender)
         self.step_type_combo.setCurrentText(self.cfg.step_type)
+        self.live_z_spin.setValue(self.cfg.live_z_threshold)
+        self.live_order_spin.setValue(self.cfg.live_major_order_threshold)
         self.auto_start_llm_check.setChecked(self.cfg.auto_start_llm)
         self.node_url_label.setText(f"API: http://{self.cfg.node_host}:{self.cfg.node_port}")
 
@@ -332,12 +385,24 @@ class RemoteMainWindow(QMainWindow):
         self.client.start_backend()
 
     def _start_session_clicked(self) -> None:
+        extra: dict[str, object] = {
+            "live_z_threshold": float(self.live_z_spin.value()),
+            "live_major_order_threshold": int(self.live_order_spin.value()),
+        }
+        dancer_first_name = self.dancer_first_name_edit.text().strip()
+        dancer_last_name = self.dancer_last_name_edit.text().strip()
+        if dancer_first_name:
+            extra["dancer_first_name"] = dancer_first_name
+        if dancer_last_name:
+            extra["dancer_last_name"] = dancer_last_name
+
         payload = {
             "dance_id": self.dance_id_combo.currentText().strip(),
             "sequence_name": self.sequence_name_edit.text().strip(),
             "gender": self.gender_combo.currentText(),
             "step_type": self.step_type_combo.currentText(),
             "session_id": f"k2_{int(time.time())}",
+            "extra": extra,
         }
         self.client.start_session(payload)
 

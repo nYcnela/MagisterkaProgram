@@ -21,8 +21,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import platform
 import re
+import socket
 import sys
 import time
 from pathlib import Path
@@ -68,6 +70,17 @@ _tokenizer = None
 _device: Optional[torch.device] = None
 _model_id: str = _DEFAULT_MODEL_ID
 _device_report: dict[str, object] = {}
+
+
+def _bind_available(host: str, port: int) -> tuple[bool, str]:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind((host, port))
+        return True, ""
+    except OSError as exc:
+        return False, str(exc)
+    finally:
+        sock.close()
 
 
 def _read_model_id_from_adapter(adapter_dir: Path) -> Optional[str]:
@@ -177,7 +190,7 @@ def load_model(adapter_dir: Path, model_id: str, use_4bit: bool = True) -> None:
                 _model_id,
                 device_map="auto",
                 quantization_config=bnb_config,
-                torch_dtype=dtype,
+                dtype=dtype,
             )
         except Exception as e:
             print(f"[LLM][warn] 4-bit failed ({e}), falling back to full precision.")
@@ -186,7 +199,7 @@ def load_model(adapter_dir: Path, model_id: str, use_4bit: bool = True) -> None:
     if not can_4bit:
         base = AutoModelForCausalLM.from_pretrained(
             _model_id,
-            torch_dtype=dtype,
+            dtype=dtype,
             device_map=None,
         ).to(_device)
 
@@ -272,6 +285,7 @@ def health():
         "status": "ok",
         "model_loaded": _model is not None,
         "model_id": _model_id,
+        "pid": os.getpid(),
         "device": str(_device) if _device is not None else None,
         "device_report": _device_report,
     }
@@ -306,6 +320,11 @@ def main() -> None:
     ap.add_argument("--host", default="0.0.0.0", help="Bind host (default: 0.0.0.0)")
     ap.add_argument("--no-4bit", action="store_true", help="Disable 4-bit quantization (auto-disabled on non-CUDA).")
     args = ap.parse_args()
+
+    ok, bind_error = _bind_available(args.host, int(args.port))
+    if not ok:
+        print(f"[LLM][err] Port {args.host}:{args.port} is already in use: {bind_error}")
+        raise SystemExit(1)
 
     adapter_dir = args.adapter_dir if args.adapter_dir.is_absolute() else (PROJECT_ROOT / args.adapter_dir)
     adapter_dir = adapter_dir.resolve()

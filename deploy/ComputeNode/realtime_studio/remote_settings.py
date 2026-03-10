@@ -16,10 +16,15 @@ class RemoteGuiConfig:
     node_port: int = 8010
     auto_connect: bool = True
 
+    dancer_first_name: str = ""
+    dancer_last_name: str = ""
+
     dance_id: str = "k_krok_podstawowy_polonez"
     sequence_name: str = "udp_sequence"
     gender: str = "female"
     step_type: str = "step"
+    live_z_threshold: float = 1.7
+    live_major_order_threshold: int = 60
 
     auto_start_llm: bool = True
 
