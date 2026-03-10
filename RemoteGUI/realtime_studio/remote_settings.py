@@ -25,6 +25,7 @@ class RemoteGuiConfig:
     step_type: str = "step"
     live_z_threshold: float = 1.7
     live_major_order_threshold: int = 60
+    analysis_chart_theme: str = "dark"
 
     auto_start_llm: bool = True
 

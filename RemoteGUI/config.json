@@ -8,7 +8,7 @@
   "sequence_name": "udp_sequence",
   "gender": "female",
   "step_type": "step",
-  "live_z_threshold": 1.3999999999999997,
+  "live_z_threshold": 1.1,
   "live_major_order_threshold": 60,
   "auto_start_llm": true
 }

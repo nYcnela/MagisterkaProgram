@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSpinBox,
     QSplitter,
+    QStackedWidget,
     QTabWidget,
     QTextEdit,
     QVBoxLayout,
@@ -95,10 +96,10 @@ class RemoteMainWindow(QMainWindow):
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(10)
-        right_layout.addWidget(self._status_card())
-        right_layout.addWidget(self._analysis_card(), 1)
-        right_layout.addWidget(self._feedback_card())
-        right_layout.addWidget(self._log_card(), 1)
+        self.right_stack = QStackedWidget()
+        self.right_stack.addWidget(self._default_right_panel())
+        self.right_stack.addWidget(self._analysis_only_panel())
+        right_layout.addWidget(self.right_stack, 1)
 
         splitter.addWidget(left)
         splitter.addWidget(right)
@@ -120,7 +121,27 @@ class RemoteMainWindow(QMainWindow):
         )
         tabs.addTab(self._scroll_tab(self._analysis_controls_card()), "Analiza")
         tabs.addTab(self._scroll_tab(self._notes_card()), "Info")
+        tabs.currentChanged.connect(self._on_tab_changed)
+        self.tabs = tabs
         return tabs
+
+    def _default_right_panel(self) -> QWidget:
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+        layout.addWidget(self._status_card())
+        layout.addWidget(self._feedback_card())
+        layout.addWidget(self._log_card(), 1)
+        return panel
+
+    def _analysis_only_panel(self) -> QWidget:
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self._analysis_card(), 1)
+        return panel
 
     def _scroll_tab(self, *contents: QWidget) -> QScrollArea:
         area = QScrollArea()
@@ -259,10 +280,15 @@ class RemoteMainWindow(QMainWindow):
         self.analysis_person_filter = QLineEdit()
         self.analysis_person_filter.setPlaceholderText("Filtr osoby")
 
+        self.analysis_theme_combo = QComboBox()
+        self.analysis_theme_combo.addItem("Ciemny", "dark")
+        self.analysis_theme_combo.addItem("Jasny", "light")
+
         self.analysis_refresh_btn = QPushButton("Odśwież runy")
 
         filter_row.addWidget(self.analysis_dance_filter, 1)
         filter_row.addWidget(self.analysis_person_filter, 1)
+        filter_row.addWidget(self.analysis_theme_combo)
         layout.addLayout(filter_row)
 
         self.analysis_runs_list = QListWidget()
@@ -384,6 +410,7 @@ class RemoteMainWindow(QMainWindow):
         self.analysis_dance_filter.currentIndexChanged.connect(self._refilter_analysis_runs)
         self.analysis_person_filter.textChanged.connect(self._refilter_analysis_runs)
         self.analysis_runs_list.itemSelectionChanged.connect(self._update_analysis_meta)
+        self.analysis_theme_combo.currentIndexChanged.connect(self._analysis_theme_changed)
 
         self.client.connection_changed.connect(self._on_connection_changed)
         self.client.snapshot_loaded.connect(self._apply_snapshot)
@@ -406,6 +433,7 @@ class RemoteMainWindow(QMainWindow):
             step_type=self.step_type_combo.currentText(),
             live_z_threshold=float(self.live_z_spin.value()),
             live_major_order_threshold=int(self.live_order_spin.value()),
+            analysis_chart_theme=str(self.analysis_theme_combo.currentData() or "dark"),
             auto_start_llm=bool(self.auto_start_llm_check.isChecked()),
         )
 
@@ -421,8 +449,11 @@ class RemoteMainWindow(QMainWindow):
         self.step_type_combo.setCurrentText(self.cfg.step_type)
         self.live_z_spin.setValue(self.cfg.live_z_threshold)
         self.live_order_spin.setValue(self.cfg.live_major_order_threshold)
+        theme_index = self.analysis_theme_combo.findData(self.cfg.analysis_chart_theme)
+        self.analysis_theme_combo.setCurrentIndex(theme_index if theme_index >= 0 else 0)
         self.auto_start_llm_check.setChecked(self.cfg.auto_start_llm)
         self.node_url_label.setText(f"API: http://{self.cfg.node_host}:{self.cfg.node_port}")
+        self.analysis_chart.set_theme(self.cfg.analysis_chart_theme)
 
     def _set_pill(self, label: QLabel, state: str, details: str = "") -> None:
         palette = {
@@ -538,6 +569,10 @@ class RemoteMainWindow(QMainWindow):
             sb = self.log_view.verticalScrollBar()
             sb.setValue(sb.maximum())
 
+    def _on_tab_changed(self, index: int) -> None:
+        label = self.tabs.tabText(index) if hasattr(self, "tabs") else ""
+        self.right_stack.setCurrentIndex(1 if label == "Analiza" else 0)
+
     def _apply_analysis_runs(self, payload: dict) -> None:
         self._analysis_runs = list(payload.get("runs", [])) if isinstance(payload, dict) else []
         current_value = self.analysis_dance_filter.currentData() or ""
@@ -614,6 +649,7 @@ class RemoteMainWindow(QMainWindow):
         self.client.fetch_analysis_run(run_id)
 
     def _apply_analysis_payload(self, payload: dict) -> None:
+        self.analysis_chart.set_theme(str(self.analysis_theme_combo.currentData() or "dark"))
         self.analysis_chart.render_analysis(payload)
         enabled = self.analysis_chart.has_data()
         self.analysis_export_png_btn.setEnabled(enabled)
@@ -634,6 +670,10 @@ class RemoteMainWindow(QMainWindow):
     def _export_analysis_csv(self) -> None:
         if self.analysis_chart.export_csv():
             self._append_log("[INFO] Zapisano dane CSV z analizy.")
+
+    def _analysis_theme_changed(self) -> None:
+        theme = str(self.analysis_theme_combo.currentData() or "dark")
+        self.analysis_chart.set_theme(theme)
 
     def _append_error(self, message: str) -> None:
         self._append_log(f"[ERROR] {message}")
