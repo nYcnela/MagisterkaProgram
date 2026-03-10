@@ -1,0 +1,300 @@
+{
+  "pattern_name": "m_krok_podstaw_uklon_polonez",
+  "source_file_count": 3,
+  "majority_threshold": 2,
+  "consensus_sequence_expanded": [
+    "L step (accented)",
+    "R accent",
+    "R step",
+    "L step",
+    "R step (accented)",
+    "L accent",
+    "L step",
+    "R step",
+    "L step (accented)",
+    "R accent",
+    "R step",
+    "L step",
+    "R step (accented)",
+    "L accent",
+    "L step",
+    "R step",
+    "L step (accented)",
+    "R accent",
+    "R step",
+    "L step",
+    "R step (accented)",
+    "L accent",
+    "L step",
+    "R step",
+    "bow, L lead",
+    "head nod"
+  ],
+  "consensus_vocabulary": [
+    "L accent",
+    "L step",
+    "L step (accented)",
+    "R accent",
+    "R step",
+    "R step (accented)",
+    "bow, L lead",
+    "head nod"
+  ],
+"arm_stability_metrics": {
+    "Lshoulder_x": {
+      "stable_period_1": {
+        "start_time_seconds": 0.25,
+        "end_time_seconds": 13.0,
+        "duration_seconds": 12.75,
+        "angle_range_degrees": {
+          "min": -25.0,
+          "max": -3.5
+        },
+        "angle_stats_degrees": {
+          "average": -14.25,
+          "stdev": 5.38
+        }
+      }
+    },
+    "Rshoulder_x": {
+      "stable_period_1": {
+        "start_time_seconds": 0.25,
+        "end_time_seconds": 16.0,
+        "duration_seconds": 15.75,
+        "angle_range_degrees": {
+          "min": -23.0,
+          "max": -12.0
+        },
+        "angle_stats_degrees": {
+          "average": -17.5,
+          "stdev": 2.75
+        }
+      }
+    },
+    "Lshoulder_y": {
+      "stable_period_1": {
+        "start_time_seconds": 0.25,
+        "end_time_seconds": 13.25,
+        "duration_seconds": 13.0,
+        "angle_range_degrees": {
+          "min": 11.0,
+          "max": 23.0
+        },
+        "angle_stats_degrees": {
+          "average": 17.0,
+          "stdev": 3.0
+        }
+      }
+    },
+    "Rshoulder_y": {
+      "stable_period_1": {
+        "start_time_seconds": 0.25,
+        "end_time_seconds": 15.5,
+        "duration_seconds": 15.25,
+        "angle_range_degrees": {
+          "min": 14.0,
+          "max": 28.0
+        },
+        "angle_stats_degrees": {
+          "average": 21.0,
+          "stdev": 3.5
+        }
+      }
+    },
+    "LElbow_x": {
+      "stable_period_1": {
+        "start_time_seconds": 0.5,
+        "end_time_seconds": 13.0,
+        "duration_seconds": 12.5,
+        "angle_range_degrees": {
+          "min": 30.0,
+          "max": 38.8
+        },
+        "angle_stats_degrees": {
+          "average": 34.4,
+          "stdev": 2.2
+        }
+      }
+    },
+    "RElbow_x": {
+      "stable_period_1": {
+        "start_time_seconds": 0.5,
+        "end_time_seconds": 16.0,
+        "duration_seconds": 15.5,
+        "angle_range_degrees": {
+          "min": 32.0,
+          "max": 43.0
+        },
+        "angle_stats_degrees": {
+          "average": 37.5,
+          "stdev": 2.75
+        }
+      }
+    }
+  },
+  "performance_metrics": {
+    "L accent": {
+      "duration_seconds": {
+        "average": 0.7756,
+        "min": 0.66,
+        "max": 0.8,
+        "stdev": 0.0445,
+        "sample_count": 9
+      },
+      "max_knee_angle": {
+        "average": 60.9404,
+        "min": 55.1042,
+        "max": 65.5627,
+        "stdev": 2.8564,
+        "sample_count": 9
+      }
+    },
+    "L step": {
+      "duration_seconds": {
+        "average": 0.5356,
+        "min": 0.44,
+        "max": 0.66,
+        "stdev": 0.0708,
+        "sample_count": 18
+      },
+      "step_length_normalized": {
+        "average": 1.9157,
+        "min": 1.6308,
+        "max": 2.1411,
+        "stdev": 0.1233,
+        "sample_count": 18
+      },
+      "max_knee_angle": {
+        "average": 63.1091,
+        "min": 57.7106,
+        "max": 68.5855,
+        "stdev": 2.9984,
+        "sample_count": 18
+      }
+    },
+    "L step (accented)": {
+      "duration_seconds": {
+        "average": 0.5978,
+        "min": 0.54,
+        "max": 0.68,
+        "stdev": 0.0406,
+        "sample_count": 9
+      },
+      "step_length_normalized": {
+        "average": 2.4549,
+        "min": 2.2482,
+        "max": 2.6091,
+        "stdev": 0.125,
+        "sample_count": 9
+      },
+      "max_knee_angle": {
+        "average": 66.347,
+        "min": 40.1074,
+        "max": 78.3832,
+        "stdev": 15.6415,
+        "sample_count": 9
+      }
+    },
+    "R accent": {
+      "duration_seconds": {
+        "average": 0.8578,
+        "min": 0.78,
+        "max": 1.12,
+        "stdev": 0.1012,
+        "sample_count": 9
+      },
+      "max_knee_angle": {
+        "average": 57.3395,
+        "min": 50.6936,
+        "max": 63.5882,
+        "stdev": 4.9446,
+        "sample_count": 9
+      }
+    },
+    "R step": {
+      "duration_seconds": {
+        "average": 0.5633,
+        "min": 0.44,
+        "max": 0.8,
+        "stdev": 0.113,
+        "sample_count": 18
+      },
+      "step_length_normalized": {
+        "average": 1.8216,
+        "min": 1.0009,
+        "max": 2.1454,
+        "stdev": 0.2608,
+        "sample_count": 18
+      },
+      "max_knee_angle": {
+        "average": 56.6859,
+        "min": 51.6414,
+        "max": 62.6109,
+        "stdev": 3.4938,
+        "sample_count": 18
+      }
+    },
+    "R step (accented)": {
+      "duration_seconds": {
+        "average": 0.7178,
+        "min": 0.6,
+        "max": 0.98,
+        "stdev": 0.1168,
+        "sample_count": 9
+      },
+      "step_length_normalized": {
+        "average": 2.6417,
+        "min": 2.5214,
+        "max": 2.8575,
+        "stdev": 0.1212,
+        "sample_count": 9
+      },
+      "max_knee_angle": {
+        "average": 75.4115,
+        "min": 73.0704,
+        "max": 79.2697,
+        "stdev": 1.8511,
+        "sample_count": 9
+      }
+    },
+    "bow, L lead": {
+      "duration_seconds": {
+        "average": 1.1267,
+        "min": 1.08,
+        "max": 1.18,
+        "stdev": 0.0503,
+        "sample_count": 3
+      },
+      "step_length_normalized": {
+        "average": 2.7125,
+        "min": 2.5848,
+        "max": 2.8121,
+        "stdev": 0.1163,
+        "sample_count": 3
+      },
+      "max_knee_angle": {
+        "average": 85.6386,
+        "min": 81.9404,
+        "max": 88.2181,
+        "stdev": 3.285,
+        "sample_count": 3
+      },
+      "max_arm_angle": {
+        "average": 29.3387,
+        "min": 27.8596,
+        "max": 30.7883,
+        "stdev": 1.4646,
+        "sample_count": 3
+      }
+    },
+    "head nod": {
+      "duration_seconds": {
+        "average": 1.5733,
+        "min": 1.24,
+        "max": 1.9,
+        "stdev": 0.3301,
+        "sample_count": 3
+      }
+    }
+  }
+}

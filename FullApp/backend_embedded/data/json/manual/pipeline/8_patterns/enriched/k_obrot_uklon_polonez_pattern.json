@@ -1,0 +1,207 @@
+{
+  "pattern_name": "k_obrot_uklon_polonez",
+  "source_file_count": 3,
+  "majority_threshold": 2,
+  "consensus_sequence_expanded": [
+    "R step (accented, side)",
+    "L accent",
+    "L step",
+    "arms up",
+    "turn (right)",
+    "R step",
+    "arms up",
+    "bow",
+    "L step",
+    "arms up",
+    "L accent",
+    "turn (left)",
+    "R step",
+    "arms up",
+    "bow"
+  ],
+  "consensus_vocabulary": [
+    "L accent",
+    "L step",
+    "R step",
+    "R step (accented)",
+    "R step (accented, side)",
+    "arms up",
+    "bow",
+    "turn (left)",
+    "turn (right)"
+  ],
+"arm_stability_metrics": {
+    "Lshoulder_x": {
+    },
+    "Rshoulder_x": {
+    },
+    "Lshoulder_y": {
+    },
+    "Rshoulder_y": {
+    },
+    "LElbow_x": {
+    },
+    "RElbow_x": {
+    }
+  },
+  "performance_metrics": {
+    "L accent": {
+      "duration_seconds": {
+        "average": 0.776,
+        "min": 0.58,
+        "max": 0.9,
+        "stdev": 0.1389,
+        "sample_count": 5
+      },
+      "max_knee_angle": {
+        "average": 40.4472,
+        "min": 26.5847,
+        "max": 52.4504,
+        "stdev": 12.5429,
+        "sample_count": 5
+      }
+    },
+    "L step": {
+      "duration_seconds": {
+        "average": 0.5314,
+        "min": 0.46,
+        "max": 0.6,
+        "stdev": 0.0564,
+        "sample_count": 7
+      },
+      "step_length_normalized": {
+        "average": 0.3991,
+        "min": 0.0108,
+        "max": 0.633,
+        "stdev": 0.2705,
+        "sample_count": 7
+      },
+      "max_knee_angle": {
+        "average": 46.3901,
+        "min": 34.4848,
+        "max": 54.1615,
+        "stdev": 6.1597,
+        "sample_count": 7
+      }
+    },
+    "R step": {
+      "duration_seconds": {
+        "average": 0.6229,
+        "min": 0.52,
+        "max": 0.82,
+        "stdev": 0.1042,
+        "sample_count": 7
+      },
+      "step_length_normalized": {
+        "average": 0.177,
+        "min": 0.02,
+        "max": 0.8067,
+        "stdev": 0.283,
+        "sample_count": 7
+      },
+      "max_knee_angle": {
+        "average": 40.3029,
+        "min": 32.3069,
+        "max": 52.0337,
+        "stdev": 7.9087,
+        "sample_count": 7
+      }
+    },
+    "R step (accented)": {
+      "duration_seconds": {
+        "average": 0.6333,
+        "min": 0.54,
+        "max": 0.8,
+        "stdev": 0.1447,
+        "sample_count": 3
+      },
+      "step_length_normalized": {
+        "average": 0.9276,
+        "min": 0.6825,
+        "max": 1.1566,
+        "stdev": 0.2375,
+        "sample_count": 3
+      },
+      "max_knee_angle": {
+        "average": 55.2324,
+        "min": 51.3918,
+        "max": 59.5155,
+        "stdev": 4.0799,
+        "sample_count": 3
+      }
+    },
+    "R step (accented, side)": {
+      "duration_seconds": {
+        "average": 0.78,
+        "min": 0.78,
+        "max": 0.78,
+        "stdev": 0.0,
+        "sample_count": 2
+      },
+      "step_length_normalized": {
+        "average": 1.3302,
+        "min": 1.2995,
+        "max": 1.3608,
+        "stdev": 0.0433,
+        "sample_count": 2
+      },
+      "max_knee_angle": {
+        "average": 56.9466,
+        "min": 56.6572,
+        "max": 57.2359,
+        "stdev": 0.4092,
+        "sample_count": 2
+      }
+    },
+    "arms up": {
+      "duration_seconds": {
+        "average": 1.1764,
+        "min": 0.74,
+        "max": 1.62,
+        "stdev": 0.3233,
+        "sample_count": 11
+      },
+      "max_arm_angle": {
+        "average": 74.3785,
+        "min": 60.7404,
+        "max": 83.9426,
+        "stdev": 8.6069,
+        "sample_count": 11
+      }
+    },
+    "bow": {
+      "duration_seconds": {
+        "average": 1.1367,
+        "min": 1.06,
+        "max": 1.24,
+        "stdev": 0.065,
+        "sample_count": 6
+      },
+      "max_knee_angle": {
+        "average": 75.3988,
+        "min": 73.2473,
+        "max": 77.9877,
+        "stdev": 2.0194,
+        "sample_count": 6
+      }
+    },
+    "turn (left)": {
+      "duration_seconds": {
+        "average": 1.62,
+        "min": 1.58,
+        "max": 1.7,
+        "stdev": 0.0693,
+        "sample_count": 3
+      }
+    },
+    "turn (right)": {
+      "duration_seconds": {
+        "average": 1.7533,
+        "min": 1.74,
+        "max": 1.78,
+        "stdev": 0.0231,
+        "sample_count": 3
+      }
+    }
+  }
+}

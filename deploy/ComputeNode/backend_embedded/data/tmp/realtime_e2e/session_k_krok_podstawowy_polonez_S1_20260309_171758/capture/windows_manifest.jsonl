@@ -1,6 +1,0 @@
-{"file_stem": "udp_sequence_00000", "window_index": 0, "start_s": 0.0, "end_s": 4.0, "first_frame": 2273, "last_frame": 2672, "frame_count": 400, "marker_count_first_frame": 39}
-{"file_stem": "udp_sequence_00001", "window_index": 1, "start_s": 3.0, "end_s": 7.0, "first_frame": 2573, "last_frame": 2972, "frame_count": 400, "marker_count_first_frame": 39}
-{"file_stem": "udp_sequence_00002", "window_index": 2, "start_s": 6.0, "end_s": 10.0, "first_frame": 2873, "last_frame": 3272, "frame_count": 400, "marker_count_first_frame": 39}
-{"file_stem": "udp_sequence_00003", "window_index": 3, "start_s": 9.0, "end_s": 13.0, "first_frame": 3173, "last_frame": 3572, "frame_count": 400, "marker_count_first_frame": 39}
-{"file_stem": "udp_sequence_00004", "window_index": 4, "start_s": 12.0, "end_s": 16.0, "first_frame": 3473, "last_frame": 3872, "frame_count": 400, "marker_count_first_frame": 39}
-{"file_stem": "udp_sequence_00005", "window_index": 5, "start_s": 15.0, "end_s": 19.0, "first_frame": 3773, "last_frame": 4172, "frame_count": 400, "marker_count_first_frame": 39}

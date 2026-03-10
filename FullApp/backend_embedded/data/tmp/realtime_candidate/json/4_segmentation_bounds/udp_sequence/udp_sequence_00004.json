@@ -1,0 +1,77 @@
+{
+  "file": "/Users/maciek/Desktop/magisterka/MagisterkaProgram/backend_embedded/data/tmp/realtime_candidate/csv/downsampled/udp_sequence/udp_sequence_00004.csv",
+  "gender": "female",
+  "step_type": "step",
+  "fs": 50.0,
+  "events": [
+    {
+      "time": 0.38,
+      "label": "R step start"
+    },
+    {
+      "time": 0.5,
+      "label": "L step start"
+    },
+    {
+      "time": 0.82,
+      "label": "R step end",
+      "value": 1.4269700050354004,
+      "units": "norm",
+      "direction": "forward",
+      "max_knee_angle": 63.408416748046875
+    },
+    {
+      "time": 1.48,
+      "label": "L step end",
+      "value": 1.198836088180542,
+      "units": "norm",
+      "direction": "forward",
+      "max_knee_angle": 57.797122955322266
+    },
+    {
+      "time": 1.56,
+      "label": "R step (accented) start"
+    },
+    {
+      "time": 1.66,
+      "label": "L accent start"
+    },
+    {
+      "time": 2.28,
+      "label": "R step (accented) end",
+      "value": 1.805229902267456,
+      "units": "norm",
+      "direction": "forward",
+      "max_knee_angle": 81.86913299560547
+    },
+    {
+      "time": 2.42,
+      "label": "L accent end",
+      "max_knee_angle": 58.96052551269531
+    },
+    {
+      "time": 2.46,
+      "label": "L step start"
+    },
+    {
+      "time": 2.88,
+      "label": "R step start"
+    },
+    {
+      "time": 2.92,
+      "label": "L step end",
+      "value": 1.3759329319000244,
+      "units": "norm",
+      "direction": "forward",
+      "max_knee_angle": 59.340206146240234
+    },
+    {
+      "time": 3.6,
+      "label": "R step end",
+      "value": 1.3950259685516357,
+      "units": "norm",
+      "direction": "forward",
+      "max_knee_angle": 65.07176971435547
+    }
+  ]
+}
