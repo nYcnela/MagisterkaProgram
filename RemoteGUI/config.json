@@ -10,5 +10,6 @@
   "step_type": "step",
   "live_z_threshold": 1.1,
   "live_major_order_threshold": 60,
+  "analysis_chart_theme": "light",
   "auto_start_llm": true
 }

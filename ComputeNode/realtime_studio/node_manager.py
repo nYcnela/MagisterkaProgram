@@ -95,6 +95,10 @@ class ComputeNodeManager:
         self._llm_thread: Optional[threading.Thread] = None
         self._llm_external = False
 
+        self._vr_sock: socket.socket | None = None
+        if cfg.vr_feedback_enabled:
+            self._vr_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
         self._health_thread = threading.Thread(target=self._health_loop, name="llm-health", daemon=True)
         self._health_thread.start()
 
@@ -113,9 +117,22 @@ class ComputeNodeManager:
             with self._lock:
                 self.snapshot.last_feedback = feedback
             self._publish("feedback", {"text": feedback})
+            self._send_vr_feedback(feedback)
 
         if source == "backend":
             self._consume_backend_line(line)
+
+    def _send_vr_feedback(self, feedback: str) -> None:
+        if self._vr_sock is None:
+            return
+        try:
+            packet = json.dumps(
+                {"type": "feedback", "text": feedback, "timestamp": time.time()},
+                ensure_ascii=False,
+            ).encode("utf-8")
+            self._vr_sock.sendto(packet, (self.cfg.vr_feedback_host, self.cfg.vr_feedback_port))
+        except Exception:
+            pass
 
     def _consume_backend_line(self, line: str) -> None:
         if line.startswith("[CONTROL] session_id="):
@@ -416,6 +433,8 @@ class ComputeNodeManager:
         self._stop_event.set()
         self.stop_backend()
         self.stop_llm()
+        if self._vr_sock is not None:
+            self._vr_sock.close()
 
 
 def create_app(cfg: ComputeNodeConfig | None = None) -> FastAPI:
@@ -500,6 +519,8 @@ def main() -> int:
     print("[NODE] ComputeNode READY", flush=True)
     print(f"[NODE] HTTP health: http://{cfg.manager_host}:{cfg.manager_port}/health", flush=True)
     print(f"[NODE] WebSocket: ws://{cfg.manager_host}:{cfg.manager_port}/ws/events", flush=True)
+    if cfg.vr_feedback_enabled:
+        print(f"[NODE] VR feedback UDP: {cfg.vr_feedback_host}:{cfg.vr_feedback_port}", flush=True)
     print("[NODE] Backend i LLM uruchamiasz z RemoteGUI.", flush=True)
     uvicorn.run(app, host=cfg.manager_host, port=cfg.manager_port, log_level="warning")
     return 0

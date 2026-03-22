@@ -30,5 +30,8 @@
   "offline_runs_root": "../runtime/offline_runs",
   "session_mode": true,
   "auto_control_port": true,
-  "auto_detect_dance": false
+  "auto_detect_dance": false,
+  "vr_feedback_enabled": true,
+  "vr_feedback_host": "100.109.145.96",
+  "vr_feedback_port": 5007
 }

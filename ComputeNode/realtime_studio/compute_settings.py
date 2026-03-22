@@ -53,6 +53,10 @@ class ComputeNodeConfig:
     auto_control_port: bool = True
     auto_detect_dance: bool = False
 
+    vr_feedback_enabled: bool = False
+    vr_feedback_host: str = "127.0.0.1"
+    vr_feedback_port: int = 5007
+
 
 def resolve_config_path(path: Path | None = None) -> Path:
     env_path = os.getenv("REALTIME_COMPUTE_CONFIG", "").strip()
