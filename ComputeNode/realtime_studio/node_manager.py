@@ -134,18 +134,31 @@ class ComputeNodeManager:
         except Exception:
             pass
 
+    def _parse_control_kv(self, line: str, prefix: str) -> dict[str, str]:
+        kv: dict[str, str] = {}
+        for part in line.replace(prefix, "", 1).split():
+            if "=" in part:
+                k, v = part.split("=", 1)
+                kv[k] = v
+        return kv
+
     def _consume_backend_line(self, line: str) -> None:
-        if line.startswith("[CONTROL] session_id="):
-            session_id = ""
-            dance_id = ""
-            run_id = ""
-            for part in line.replace("[CONTROL] ", "").split():
-                if part.startswith("session_id="):
-                    session_id = part.split("=", 1)[1]
-                elif part.startswith("dance_id="):
-                    dance_id = part.split("=", 1)[1]
-                elif part.startswith("run_id="):
-                    run_id = part.split("=", 1)[1]
+        if line.startswith("[CONTROL] PREP session_id="):
+            kv = self._parse_control_kv(line, "[CONTROL] PREP ")
+            run_id = kv.get("run_id", "")
+            dance_id = kv.get("dance_id", "")
+            with self._lock:
+                if run_id:
+                    self.snapshot.run_id = run_id
+                if dance_id:
+                    self.snapshot.dance_id = dance_id
+            self._publish("session_prepared", {"run_id": run_id, "dance_id": dance_id})
+
+        elif line.startswith("[CONTROL] session_id="):
+            kv = self._parse_control_kv(line, "[CONTROL] ")
+            session_id = kv.get("session_id", "")
+            dance_id = kv.get("dance_id", "")
+            run_id = kv.get("run_id", "")
             with self._lock:
                 self.snapshot.session_active = True
                 self.snapshot.session_id = session_id
@@ -156,6 +169,7 @@ class ComputeNodeManager:
                 "session_started",
                 {"session_id": session_id, "dance_id": dance_id, "run_id": run_id},
             )
+
         elif line.startswith("[CONTROL] STOP session_id="):
             with self._lock:
                 self.snapshot.session_active = False
@@ -286,19 +300,26 @@ class ComputeNodeManager:
             if self._llm_proc is not None and self._llm_proc.poll() is None:
                 return
         cfg = self._studio_cfg()
-        existing = self._probe_llm_health(timeout=0.6)
-        if existing is not None:
-            self._llm_external = True
-            loaded = bool(existing.get("model_loaded", False))
-            details = "existing server" if loaded else "existing server loading"
-            pid = existing.get("pid") if isinstance(existing.get("pid"), int) else None
-            self._append_log("node", f"LLM already responding on {cfg.llm_host}:{cfg.llm_port}; reusing existing server.")
-            self._set_process_status("llm", "READY" if loaded else "STARTING", details, pid)
-            return
+
+        # Try to detect an existing LLM server (two attempts, increasing timeout).
+        for timeout in (0.6, 1.5):
+            existing = self._probe_llm_health(timeout=timeout)
+            if existing is not None:
+                self._llm_external = True
+                loaded = bool(existing.get("model_loaded", False))
+                details = "existing server" if loaded else "existing server loading"
+                pid = existing.get("pid") if isinstance(existing.get("pid"), int) else None
+                self._append_log("node", f"LLM already responding on {cfg.llm_host}:{cfg.llm_port}; reusing existing server.")
+                self._set_process_status("llm", "READY" if loaded else "STARTING", details, pid)
+                return
+
         if self._port_in_use(cfg.llm_host, int(cfg.llm_port)):
-            self._append_log("node", f"Cannot start LLM: port {cfg.llm_port} is already in use.")
-            self._set_process_status("llm", "ERROR", f"port {cfg.llm_port} busy", None)
+            # Port occupied but health endpoint not ready yet — assume LLM is booting.
+            self._llm_external = True
+            self._append_log("node", f"Port {cfg.llm_port} in use; waiting for LLM health endpoint.")
+            self._set_process_status("llm", "STARTING", f"port {cfg.llm_port} occupied, probing", None)
             return
+
         program, args, backend_root = build_llm_command(cfg)
         self._llm_external = False
         self._append_log("node", f"Starting LLM on {cfg.llm_host}:{cfg.llm_port}")

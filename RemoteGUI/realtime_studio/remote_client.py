@@ -30,7 +30,7 @@ class RemoteNodeClient(QObject):
         self._ws.errorOccurred.connect(self._on_error)
 
         self._reconnect_timer = QTimer(self)
-        self._reconnect_timer.setInterval(2000)
+        self._reconnect_timer.setInterval(800)
         self._reconnect_timer.timeout.connect(self._ensure_connected)
 
         self._connected = False
@@ -127,8 +127,9 @@ class RemoteNodeClient(QObject):
                 body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
                 headers["Content-Type"] = "application/json"
             req = request.Request(url, data=body, headers=headers, method=method)
+            timeout = 6.0 if method == "POST" else 3.0
             try:
-                with request.urlopen(req, timeout=2.5) as resp:
+                with request.urlopen(req, timeout=timeout) as resp:
                     result = json.loads(resp.read().decode("utf-8"))
             except error.HTTPError as exc:
                 try:

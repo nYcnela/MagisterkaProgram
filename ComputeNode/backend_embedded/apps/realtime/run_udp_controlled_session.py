@@ -309,7 +309,11 @@ class ControlServer:
 
         if msg_type in {"session_prepare", "prepare"}:
             self.last_payload = dict(msg)
+            session_id = str(msg.get("session_id") or f"s{int(time.time())}")
+            dance_id = str(msg.get("dance_id") or "").strip()
+            preview_run_id = self._build_run_id(msg, session_id, dance_id)
             print(f"[CONTROL] PREP cached session meta: {json.dumps(self.last_payload, ensure_ascii=False)}")
+            print(f"[CONTROL] PREP session_id={session_id} dance_id={dance_id} run_id={preview_run_id}")
             return
 
         if msg_type in {"session_start", "start_now", "start"}:

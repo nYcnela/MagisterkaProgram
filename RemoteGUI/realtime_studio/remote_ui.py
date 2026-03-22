@@ -61,7 +61,7 @@ class RemoteMainWindow(QMainWindow):
     def _build_ui(self) -> None:
         self.setWindowTitle("Remote Studio")
         self.resize(1480, 920)
-        self.setMinimumSize(1180, 760)
+        self.setMinimumSize(820, 520)
 
         root = QWidget(self)
         self.setCentralWidget(root)
@@ -103,9 +103,8 @@ class RemoteMainWindow(QMainWindow):
 
         splitter.addWidget(left)
         splitter.addWidget(right)
-        splitter.setStretchFactor(0, 4)
+        splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 5)
-        splitter.setSizes([560, 880])
 
     def _tabs_panel(self) -> QTabWidget:
         tabs = QTabWidget()
@@ -131,8 +130,8 @@ class RemoteMainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
         layout.addWidget(self._status_card())
-        layout.addWidget(self._feedback_card())
-        layout.addWidget(self._log_card(), 1)
+        layout.addWidget(self._feedback_card(), 1)
+        layout.addWidget(self._log_card(), 2)
         return panel
 
     def _analysis_only_panel(self) -> QWidget:
@@ -275,7 +274,7 @@ class RemoteMainWindow(QMainWindow):
 
         self.analysis_dance_filter = QComboBox()
         self.analysis_dance_filter.addItem("Wszystkie tańce", "")
-        self.analysis_dance_filter.setMinimumWidth(220)
+        self.analysis_dance_filter.setMinimumWidth(140)
 
         self.analysis_person_filter = QLineEdit()
         self.analysis_person_filter.setPlaceholderText("Filtr osoby")
@@ -292,7 +291,7 @@ class RemoteMainWindow(QMainWindow):
         layout.addLayout(filter_row)
 
         self.analysis_runs_list = QListWidget()
-        self.analysis_runs_list.setMinimumHeight(250)
+        self.analysis_runs_list.setMinimumHeight(120)
         layout.addWidget(self.analysis_runs_list)
 
         self.analysis_meta_label = QLabel("Wybierz run, aby przygotować analizę.")
@@ -356,16 +355,26 @@ class RemoteMainWindow(QMainWindow):
         self.backend_state_pill = QLabel("STOPPED")
         self.llm_state_pill = QLabel("STOPPED")
         self.run_id_label = QLabel("Run ID: -")
+        self.run_id_label.setWordWrap(True)
         self.session_label = QLabel("Sesja: -")
+        self.session_label.setWordWrap(True)
         for label in [self.node_state_pill, self.backend_state_pill, self.llm_state_pill]:
             label.setObjectName("StatePill")
 
-        layout.addWidget(QLabel("Połączenie"))
-        layout.addWidget(self.node_state_pill)
-        layout.addWidget(QLabel("Backend"))
-        layout.addWidget(self.backend_state_pill)
-        layout.addWidget(QLabel("LLM"))
-        layout.addWidget(self.llm_state_pill)
+        pills_grid = QGridLayout()
+        pills_grid.setHorizontalSpacing(8)
+        pills_grid.setVerticalSpacing(4)
+        pills_grid.addWidget(QLabel("Połączenie"), 0, 0)
+        pills_grid.addWidget(self.node_state_pill, 1, 0)
+        pills_grid.addWidget(QLabel("Backend"), 0, 1)
+        pills_grid.addWidget(self.backend_state_pill, 1, 1)
+        pills_grid.addWidget(QLabel("LLM"), 0, 2)
+        pills_grid.addWidget(self.llm_state_pill, 1, 2)
+        pills_grid.setColumnStretch(0, 1)
+        pills_grid.setColumnStretch(1, 1)
+        pills_grid.setColumnStretch(2, 1)
+        layout.addLayout(pills_grid)
+
         layout.addWidget(self.run_id_label)
         layout.addWidget(self.session_label)
         return card
@@ -374,7 +383,7 @@ class RemoteMainWindow(QMainWindow):
         card, layout = self._card("Ostatnia informacja zwrotna")
         self.feedback_view = QTextEdit()
         self.feedback_view.setReadOnly(True)
-        self.feedback_view.setMinimumHeight(110)
+        self.feedback_view.setMinimumHeight(60)
         layout.addWidget(self.feedback_view)
         return card
 
@@ -388,19 +397,19 @@ class RemoteMainWindow(QMainWindow):
         card, layout = self._card("Log z K1")
         self.log_view = QTextEdit()
         self.log_view.setReadOnly(True)
-        self.log_view.setMinimumHeight(300)
+        self.log_view.setMinimumHeight(80)
         layout.addWidget(self.log_view)
         return card
 
     def _bind_signals(self) -> None:
         self.connect_btn.clicked.connect(self._connect_clicked)
         self.refresh_btn.clicked.connect(self.client.fetch_snapshot)
-        self.start_llm_btn.clicked.connect(self.client.start_llm)
-        self.stop_llm_btn.clicked.connect(self.client.stop_llm)
+        self.start_llm_btn.clicked.connect(self._start_llm_clicked)
+        self.stop_llm_btn.clicked.connect(self._stop_llm_clicked)
         self.start_backend_btn.clicked.connect(self._start_backend_clicked)
-        self.stop_backend_btn.clicked.connect(self.client.stop_backend)
+        self.stop_backend_btn.clicked.connect(self._stop_backend_clicked)
         self.start_session_btn.clicked.connect(self._start_session_clicked)
-        self.stop_session_btn.clicked.connect(lambda: self.client.stop_session({"reason": "remote_gui"}))
+        self.stop_session_btn.clicked.connect(self._stop_session_clicked)
         self.save_btn.clicked.connect(self._save_clicked)
         self.analysis_refresh_btn.clicked.connect(self.client.fetch_analysis_runs)
         self.analysis_generate_btn.clicked.connect(self._analysis_generate_clicked)
@@ -476,12 +485,30 @@ class RemoteMainWindow(QMainWindow):
         self.node_url_label.setText(f"API: http://{self.cfg.node_host}:{self.cfg.node_port}")
         self.client.connect_node()
 
+    def _start_llm_clicked(self) -> None:
+        self._set_pill(self.llm_state_pill, "STARTING", "sending request...")
+        self.client.start_llm()
+
+    def _stop_llm_clicked(self) -> None:
+        self._set_pill(self.llm_state_pill, "STOPPED", "stopping...")
+        self.client.stop_llm()
+
     def _start_backend_clicked(self) -> None:
         self.cfg = self._collect_cfg()
         self.client.update_config(self.cfg)
+        self._set_pill(self.backend_state_pill, "STARTING", "sending request...")
         if self.cfg.auto_start_llm:
+            self._set_pill(self.llm_state_pill, "STARTING", "sending request...")
             self.client.start_llm()
         self.client.start_backend()
+
+    def _stop_backend_clicked(self) -> None:
+        self._set_pill(self.backend_state_pill, "STOPPED", "stopping...")
+        self.client.stop_backend()
+
+    def _stop_session_clicked(self) -> None:
+        self.session_label.setText("Sesja: (stopping...)")
+        self.client.stop_session({"reason": "remote_gui"})
 
     def _start_session_clicked(self) -> None:
         extra: dict[str, object] = {
@@ -533,6 +560,13 @@ class RemoteMainWindow(QMainWindow):
             self._set_pill(self.backend_state_pill, payload.get("state", "STOPPED"), payload.get("details", ""))
         elif kind == "llm_state":
             self._set_pill(self.llm_state_pill, payload.get("state", "STOPPED"), payload.get("details", ""))
+        elif kind == "session_prepared":
+            run_id = payload.get("run_id", "")
+            dance_id = payload.get("dance_id", "")
+            if run_id:
+                self.run_id_label.setText(f"Run ID: {run_id}")
+            if dance_id:
+                self.session_label.setText(f"Sesja: (prepare) / {dance_id}")
         elif kind == "session_started":
             session_id = payload.get("session_id", "")
             dance_id = payload.get("dance_id", "")
