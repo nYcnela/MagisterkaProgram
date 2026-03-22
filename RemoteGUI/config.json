@@ -4,12 +4,12 @@
   "auto_connect": true,
   "dancer_first_name": "Maciek",
   "dancer_last_name": "A",
-  "dance_id": "k_krok_podstawowy_polonez",
+  "dance_id": "k_obrot_uklon_polonez",
   "sequence_name": "udp_sequence",
   "gender": "female",
-  "step_type": "step",
-  "live_z_threshold": 1.1,
+  "step_type": "static",
+  "live_z_threshold": 2.1,
   "live_major_order_threshold": 60,
-  "analysis_chart_theme": "light",
+  "analysis_chart_theme": "dark",
   "auto_start_llm": true
 }

@@ -24,7 +24,8 @@ def main() -> int:
     ap.add_argument("--session-id", default="S1")
     ap.add_argument("--dance-id", default="k_krok_podstawowy_polonez")
     ap.add_argument("--gender", choices=["female", "male"], default="female")
-    ap.add_argument("--step-type", choices=["step", "static"], default="step")
+    ap.add_argument("--step-type", choices=["step", "static"], default=None,
+                     help="Overrides auto-detection from dance-id (krok->step, else static)")
     ap.add_argument("--sequence-name", default="udp_sequence")
     ap.add_argument("--pattern-file", default="")
     ap.add_argument("--run-id", default="")
@@ -35,12 +36,13 @@ def main() -> int:
     if args.from_json is not None:
         payload = _load_json_path(args.from_json)
     else:
+        step_type = args.step_type or ("step" if "krok" in args.dance_id else "static")
         payload = {
             "type": args.type,
             "session_id": args.session_id,
             "dance_id": args.dance_id,
             "gender": args.gender,
-            "step_type": args.step_type,
+            "step_type": step_type,
             "sequence_name": args.sequence_name,
         }
         if args.pattern_file:

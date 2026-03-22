@@ -127,7 +127,7 @@ class AnalysisFigureWidget(QWidget):
 
         self._plot_specs = self._build_plot_specs(payload)
         if not self._plot_specs:
-            self.set_message("Dla tego runu nie ma jeszcze danych do analizy.")
+            self.set_message("No analysis data available for this run yet.")
             return
 
         self._clear_cards()
@@ -152,11 +152,11 @@ class AnalysisFigureWidget(QWidget):
             palette = self._palette()
             figure = Figure(figsize=(8.8, 2.8), facecolor=palette["figure_face"])
             canvas = _ScrollFriendlyCanvas(figure)
-            canvas.setMinimumHeight(240)
+            canvas.setMinimumHeight(280)
             ax = figure.subplots(1, 1)
             self._style_axes(ax)
             self._render_spec(ax, spec, include_title=False)
-            figure.tight_layout(pad=1.4)
+            figure.tight_layout(pad=1.4, rect=[0, 0.14, 1, 1])
             card_layout.addWidget(canvas)
             self._host_layout.addWidget(card)
 
@@ -199,6 +199,22 @@ class AnalysisFigureWidget(QWidget):
                 writer.writerow(row)
         return True
 
+    _METRIC_CARD_TITLES = {
+        "duration_seconds": "Czas trwania ruchow podczas sekwencji",
+        "step_length_normalized": "Dlugosc kroku",
+        "max_knee_angle": "Kat kolana",
+        "max_arm_angle": "Kat reki",
+        "max_head_angle": "Kat glowy",
+    }
+
+    _METRIC_CHART_TITLES = {
+        "duration_seconds": "Movement duration during sequence",
+        "step_length_normalized": "Step length",
+        "max_knee_angle": "Knee angle",
+        "max_arm_angle": "Arm angle",
+        "max_head_angle": "Head angle",
+    }
+
     def _build_plot_specs(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
         charts = dict(payload.get("charts", {}))
         event_metrics = dict(charts.get("event_metrics", {}))
@@ -219,8 +235,9 @@ class AnalysisFigureWidget(QWidget):
                 specs.append(
                     {
                         "kind": "metric",
-                        "title": metric.get("title", "Metryka"),
-                        "note": "Punkty są ułożone w kolejności zdarzeń wykrytych w runie.",
+                        "title": self._METRIC_CARD_TITLES.get(key, metric.get("title", "Metryka")),
+                        "chart_title": self._METRIC_CHART_TITLES.get(key, key),
+                        "note": "Punkty sa ulozone w kolejnosci zdarzen wykrytych w runie.",
                         "data": metric,
                     }
                 )
@@ -228,8 +245,9 @@ class AnalysisFigureWidget(QWidget):
             specs.append(
                 {
                     "kind": "stability_shoulders",
-                    "title": "Stabilność barków",
-                    "note": "Porównanie średniego ustawienia względem wzorca.",
+                    "title": "Stabilnosc barkow",
+                    "chart_title": "Shoulder stability",
+                    "note": "Porownanie sredniego ustawienia wzgledem wzorca.",
                     "data": shoulders,
                 }
             )
@@ -237,8 +255,9 @@ class AnalysisFigureWidget(QWidget):
             specs.append(
                 {
                     "kind": "stability_elbows",
-                    "title": "Stabilność łokci",
-                    "note": "Porównanie średniego ustawienia względem wzorca.",
+                    "title": "Stabilnosc lokci",
+                    "chart_title": "Elbow stability",
+                    "note": "Porownanie sredniego ustawienia wzgledem wzorca.",
                     "data": elbows,
                 }
             )
@@ -246,7 +265,8 @@ class AnalysisFigureWidget(QWidget):
             specs.append(
                 {
                     "kind": "window_scores",
-                    "title": "Kolejność i wynik zbiorczy",
+                    "title": "Kolejnosc i wynik zbiorczy",
+                    "chart_title": "Order & composite scores",
                     "note": "Wyniki policzone osobno dla kolejnych okien czasowych.",
                     "data": window_scores,
                 }
@@ -268,7 +288,7 @@ class AnalysisFigureWidget(QWidget):
         for ax, spec in zip([row[0] for row in axes], self._plot_specs):
             self._style_axes(ax)
             self._render_spec(ax, spec, include_title=True)
-        figure.tight_layout(h_pad=1.8)
+        figure.tight_layout(h_pad=1.8, rect=[0, 0.04, 1, 1])
         return figure
 
     def _palette(self) -> dict[str, str]:
@@ -276,14 +296,15 @@ class AnalysisFigureWidget(QWidget):
 
     def _render_spec(self, ax, spec: dict[str, Any], *, include_title: bool) -> None:
         kind = str(spec.get("kind") or "")
+        chart_title = spec.get("chart_title", spec["title"]) if include_title else ""
         if kind == "metric":
-            self._plot_metric(ax, spec["data"], spec["title"] if include_title else "")
+            self._plot_metric(ax, spec["data"], chart_title)
         elif kind == "stability_shoulders":
-            self._plot_stability(ax, spec["data"], spec["title"] if include_title else "")
+            self._plot_stability(ax, spec["data"], chart_title)
         elif kind == "stability_elbows":
-            self._plot_stability(ax, spec["data"], spec["title"] if include_title else "")
+            self._plot_stability(ax, spec["data"], chart_title)
         else:
-            self._plot_window_scores(ax, spec["data"], spec["title"] if include_title else "")
+            self._plot_window_scores(ax, spec["data"], chart_title)
 
     def _style_axes(self, ax) -> None:
         palette = self._palette()
@@ -303,21 +324,30 @@ class AnalysisFigureWidget(QWidget):
         lower = [exp - sd for exp, sd in zip(expected, stdev)]
         upper = [exp + sd for exp, sd in zip(expected, stdev)]
 
-        ax.fill_between(x, lower, upper, color=palette["pattern_fill"], alpha=0.16)
-        ax.plot(x, expected, color=palette["pattern_line"], linewidth=2.0, linestyle="--", marker="o", markersize=3)
-        ax.plot(x, measured, color=palette["measured_line"], linewidth=2.4, marker="o", markersize=4)
+        ax.fill_between(x, lower, upper, color=palette["pattern_fill"], alpha=0.16, label="Reference range (avg ± std)")
+        ax.plot(x, expected, color=palette["pattern_line"], linewidth=2.0, linestyle="--", marker="o", markersize=3, label="Reference avg")
+        ax.plot(x, measured, color=palette["measured_line"], linewidth=2.4, marker="o", markersize=4, label="Measured")
 
         if title:
             ax.set_title(title, loc="left", fontsize=11, fontweight="bold", color=palette["title"])
         unit = str(metric.get("unit") or "")
         ax.set_ylabel(unit, color=palette["text"])
-        ax.set_xlabel("Kolejność zdarzeń", color=palette["text"])
+        ax.set_xlabel("Event order", color=palette["text"])
         self._apply_simple_xticks(ax, x)
-        ax.legend(["Wzorzec", "Osoba badana"], loc="upper right", frameon=False, labelcolor=palette["text"], fontsize=8)
+        self._legend_below(ax, None, palette, handles=ax.get_legend_handles_labels()[0])
+
+    _LABEL_PL_TO_EN = {
+        "Lewy bark X": "L shoulder X",
+        "Prawy bark X": "R shoulder X",
+        "Lewy bark Y": "L shoulder Y",
+        "Prawy bark Y": "R shoulder Y",
+        "Lewy łokieć": "L elbow",
+        "Prawy łokieć": "R elbow",
+    }
 
     def _plot_stability(self, ax, points: list[dict[str, Any]], title: str) -> None:
         palette = self._palette()
-        labels = [str(point.get("label") or "") for point in points]
+        labels = [self._LABEL_PL_TO_EN.get(str(point.get("label") or ""), str(point.get("label") or "")) for point in points]
         x = list(range(len(points)))
         expected = [float(point.get("expected_angle_avg", 0.0)) for point in points]
         measured = [float(point.get("measured_angle_avg", 0.0)) for point in points]
@@ -332,13 +362,13 @@ class AnalysisFigureWidget(QWidget):
             ax.set_title(title, loc="left", fontsize=11, fontweight="bold", color=palette["title"])
         ax.set_ylabel("deg", color=palette["text"])
         ax.set_xticks(x)
-        ax.set_xticklabels(labels, rotation=18, ha="right", color=palette["text"])
-        ax.legend(["Wzorzec", "Osoba badana"], loc="upper right", frameon=False, labelcolor=palette["text"], fontsize=8)
+        ax.set_xticklabels(labels, rotation=0, ha="center", color=palette["text"])
+        self._legend_below(ax, ["Reference pattern", "Measured"], palette)
 
     def _plot_window_scores(self, ax, points: list[dict[str, Any]], title: str) -> None:
         palette = self._palette()
         x = [point.get("index", idx + 1) for idx, point in enumerate(points)]
-        labels = [f"okno {point.get('window_index', idx)}" for idx, point in enumerate(points)]
+        labels = [f"W{point.get('window_index', idx)}" for idx, point in enumerate(points)]
         order_score = [float(point.get("order_score", 0.0)) for point in points]
         composite_score = [float(point.get("composite_score", 0.0)) for point in points]
         feedback_score = [point.get("feedback_score") for point in points]
@@ -355,7 +385,7 @@ class AnalysisFigureWidget(QWidget):
         if feedback_points:
             ax2 = ax.twinx()
             ax2.set_ylim(1, 5.2)
-            ax2.set_ylabel("feedback", color=palette["text"])
+            ax2.set_ylabel("Feedback (1\u20135)", color=palette["text"])
             ax2.tick_params(colors=palette["text"], labelsize=9)
             for spine in ax2.spines.values():
                 spine.set_color(palette["spine"])
@@ -366,20 +396,36 @@ class AnalysisFigureWidget(QWidget):
                 linewidth=1.8,
                 marker="o",
                 markersize=4,
-                label="Feedback score (1-5)",
+                label="Feedback (1\u20135)",
             )
 
         if title:
             ax.set_title(title, loc="left", fontsize=11, fontweight="bold", color=palette["title"])
         ax.set_ylim(0, 105)
-        ax.set_ylabel("score", color=palette["text"])
-        ax.set_xlabel("Okna czasowe", color=palette["text"])
+        ax.set_ylabel("Score", color=palette["text"])
+        ax.set_xlabel("Time windows", color=palette["text"])
         ax.set_xticks(x)
-        ax.set_xticklabels(labels, rotation=22, ha="right", color=palette["text"])
+        ax.set_xticklabels(labels, rotation=0, ha="center", color=palette["text"])
         handles = [order_line, composite_line]
         if feedback_line is not None:
             handles.append(feedback_line)
-        ax.legend(handles=handles, loc="upper right", frameon=False, labelcolor=palette["text"], fontsize=8)
+        self._legend_below(ax, None, palette, handles=handles)
+
+    def _legend_below(self, ax, labels: list[str] | None, palette: dict[str, str], *, handles=None) -> None:
+        kwargs: dict[str, Any] = {
+            "loc": "upper center",
+            "bbox_to_anchor": (0.5, -0.25),
+            "frameon": False,
+            "labelcolor": palette["text"],
+            "fontsize": 8,
+        }
+        if handles is not None:
+            kwargs["handles"] = handles
+            kwargs["ncol"] = len(handles)
+        elif labels is not None:
+            kwargs["labels"] = labels
+            kwargs["ncol"] = len(labels)
+        ax.legend(**kwargs)
 
     def _apply_simple_xticks(self, ax, x_values: list[Any]) -> None:
         if not x_values:
@@ -456,7 +502,7 @@ class AnalysisFigureWidget(QWidget):
                 {
                     "group": "window_score",
                     "metric": "score",
-                    "label": f"okno {point.get('window_index', '')}",
+                    "label": f"W{point.get('window_index', '')}",
                     "index": point.get("index", ""),
                     "window_index": point.get("window_index", ""),
                     "event_label": "",

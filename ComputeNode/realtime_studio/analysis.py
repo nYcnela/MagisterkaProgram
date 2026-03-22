@@ -13,11 +13,11 @@ from .launch import discover_backend_root, resolve_under_root
 
 
 EVENT_METRIC_LABELS = {
-    "duration_seconds": "Czas ruchu",
-    "step_length_normalized": "Długość kroku",
-    "max_knee_angle": "Kąt kolana",
-    "max_arm_angle": "Kąt ręki",
-    "max_head_angle": "Kąt głowy",
+    "duration_seconds": "Movement duration",
+    "step_length_normalized": "Step length",
+    "max_knee_angle": "Knee angle",
+    "max_arm_angle": "Arm angle",
+    "max_head_angle": "Head angle",
 }
 
 EVENT_METRIC_UNITS = {
@@ -29,12 +29,12 @@ EVENT_METRIC_UNITS = {
 }
 
 CHANNEL_LABELS = {
-    "Lshoulder_x": "Lewy bark X",
-    "Rshoulder_x": "Prawy bark X",
-    "Lshoulder_y": "Lewy bark Y",
-    "Rshoulder_y": "Prawy bark Y",
-    "LElbow_x": "Lewy łokieć",
-    "RElbow_x": "Prawy łokieć",
+    "Lshoulder_x": "L shoulder X",
+    "Rshoulder_x": "R shoulder X",
+    "Lshoulder_y": "L shoulder Y",
+    "Rshoulder_y": "R shoulder Y",
+    "LElbow_x": "L elbow",
+    "RElbow_x": "R elbow",
 }
 
 
