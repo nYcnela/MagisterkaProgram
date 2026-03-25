@@ -98,6 +98,7 @@ class ComputeNodeManager:
         self._vr_sock: socket.socket | None = None
         if cfg.vr_feedback_enabled:
             self._vr_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self._session_scores: list[float] = []
 
         self._health_thread = threading.Thread(target=self._health_loop, name="llm-health", daemon=True)
         self._health_thread.start()
@@ -118,18 +119,41 @@ class ComputeNodeManager:
                 self.snapshot.last_feedback = feedback
             self._publish("feedback", {"text": feedback})
             self._send_vr_feedback(feedback)
+            score = self._extract_feedback_score(line)
+            if score is not None:
+                with self._lock:
+                    self._session_scores.append(score)
 
         if source == "backend":
             self._consume_backend_line(line)
 
+    @staticmethod
+    def _extract_feedback_score(line: str) -> float | None:
+        m = re.search(r"\(score=([0-9.]+)", line)
+        if m:
+            try:
+                return float(m.group(1))
+            except ValueError:
+                pass
+        return None
+
     def _send_vr_feedback(self, feedback: str) -> None:
+        self._send_vr_packet({"type": "feedback", "text": feedback})
+
+    def _send_vr_summary(self) -> None:
+        with self._lock:
+            scores = list(self._session_scores)
+        if not scores:
+            return
+        avg = round(sum(scores) / len(scores), 2)
+        self._append_log("node", f"Session summary: {len(scores)} feedback(s), avg score={avg}")
+        self._send_vr_packet({"type": "summary", "text": str(avg)})
+
+    def _send_vr_packet(self, payload: dict) -> None:
         if self._vr_sock is None:
             return
         try:
-            packet = json.dumps(
-                {"type": "feedback", "text": feedback, "timestamp": time.time()},
-                ensure_ascii=False,
-            ).encode("utf-8")
+            packet = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             self._vr_sock.sendto(packet, (self.cfg.vr_feedback_host, self.cfg.vr_feedback_port))
         except Exception:
             pass
@@ -165,12 +189,15 @@ class ComputeNodeManager:
                 self.snapshot.dance_id = dance_id
                 if run_id:
                     self.snapshot.run_id = run_id
+            with self._lock:
+                self._session_scores.clear()
             self._publish(
                 "session_started",
                 {"session_id": session_id, "dance_id": dance_id, "run_id": run_id},
             )
 
         elif line.startswith("[CONTROL] STOP session_id="):
+            self._send_vr_summary()
             with self._lock:
                 self.snapshot.session_active = False
                 self.snapshot.session_id = ""

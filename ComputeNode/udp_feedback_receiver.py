@@ -31,10 +31,9 @@ def main() -> int:
             now = datetime.now().strftime("%H:%M:%S")
             try:
                 payload = json.loads(data.decode("utf-8"))
+                ptype = payload.get("type", "?")
                 text = payload.get("text", data.decode("utf-8"))
-                ts = payload.get("timestamp")
-                ts_str = f"  (ts={ts:.3f})" if ts else ""
-                print(f"[{now}] from {addr[0]}:{addr[1]}{ts_str}")
+                print(f"[{now}] from {addr[0]}:{addr[1]}  type={ptype}")
                 print(f"  {text}")
                 print()
             except (json.JSONDecodeError, UnicodeDecodeError):
