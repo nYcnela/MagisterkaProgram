@@ -145,8 +145,6 @@ def build_backend_command(cfg: StudioConfig, run_id: str | None = None) -> tuple
     backend_root = discover_backend_root(cfg.backend_root)
 
     output_root = resolve_under_root(cfg.output_root, backend_root)
-    candidate_root = resolve_under_root(cfg.candidate_root, backend_root)
-    offline_runs_root = resolve_under_root(cfg.offline_runs_root, backend_root)
 
     if cfg.session_mode:
         script = backend_root / "bin/run_udp_controlled_session.py"
@@ -181,10 +179,6 @@ def build_backend_command(cfg: StudioConfig, run_id: str | None = None) -> tuple
             str(cfg.sequence_name),
             "--output-root",
             str(output_root),
-            "--candidate-root",
-            str(candidate_root),
-            "--offline-runs-root",
-            str(offline_runs_root),
             "--live-z-threshold",
             str(cfg.live_z_threshold),
             "--live-major-order-threshold",
@@ -230,10 +224,6 @@ def build_backend_command(cfg: StudioConfig, run_id: str | None = None) -> tuple
             "--model-inputs-only",
             "--output-root",
             str(output_root),
-            "--candidate-root",
-            str(candidate_root),
-            "--offline-runs-root",
-            str(offline_runs_root),
             "--run-id",
             resolved_run_id,
             "--live-z-threshold",

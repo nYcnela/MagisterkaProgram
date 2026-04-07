@@ -230,8 +230,6 @@ class ComputeNodeManager:
             live_major_order_threshold=self.cfg.live_major_order_threshold,
             live_emit_minor_order_text=self.cfg.live_emit_minor_order_text,
             output_root=self.cfg.output_root,
-            candidate_root=self.cfg.candidate_root,
-            offline_runs_root=self.cfg.offline_runs_root,
             auto_control_port=self.cfg.auto_control_port,
             auto_detect_dance=self.cfg.auto_detect_dance,
             session_mode=self.cfg.session_mode,

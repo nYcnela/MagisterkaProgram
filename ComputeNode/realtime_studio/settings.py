@@ -51,8 +51,6 @@ class StudioConfig:
     live_emit_minor_order_text: bool = False
 
     output_root: str = "../runtime/realtime_e2e"
-    candidate_root: str = "../runtime/realtime_candidate"
-    offline_runs_root: str = "../runtime/offline_runs"
 
     auto_control_port: bool = True
     auto_detect_dance: bool = True
@@ -105,8 +103,6 @@ def load_config(path: Path = SETTINGS_PATH) -> StudioConfig:
     dancer_dir = _dancer_subdir(cfg)
     if dancer_dir:
         cfg.output_root = _strip_repeated_suffix(cfg.output_root, dancer_dir)
-        cfg.candidate_root = _strip_repeated_suffix(cfg.candidate_root, dancer_dir)
-        cfg.offline_runs_root = _strip_repeated_suffix(cfg.offline_runs_root, dancer_dir)
     return cfg
 
 

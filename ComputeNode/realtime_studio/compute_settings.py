@@ -46,8 +46,6 @@ class ComputeNodeConfig:
     live_emit_minor_order_text: bool = False
 
     output_root: str = "../runtime/realtime_e2e"
-    candidate_root: str = "../runtime/realtime_candidate"
-    offline_runs_root: str = "../runtime/offline_runs"
 
     session_mode: bool = True
     auto_control_port: bool = True

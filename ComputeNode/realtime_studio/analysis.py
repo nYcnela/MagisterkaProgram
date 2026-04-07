@@ -96,12 +96,36 @@ def _load_prompt_module(src_root_str: str):
     return importlib.import_module("pipeline_core.realtime.prompt_windows")
 
 
-def _analysis_roots(cfg: ComputeNodeConfig) -> tuple[Path, Path, Path, Path]:
+def _analysis_roots(cfg: ComputeNodeConfig) -> tuple[Path, Path, Path]:
     backend_root = discover_backend_root(cfg.backend_root)
     output_root = resolve_under_root(cfg.output_root, backend_root)
-    candidate_root = resolve_under_root(cfg.candidate_root, backend_root)
     pattern_root = backend_root / "dance_patterns"
-    return backend_root, output_root, candidate_root, pattern_root
+    return backend_root, output_root, pattern_root
+
+
+def _iter_run_dirs(output_root: Path) -> list[Path]:
+    if not output_root.exists():
+        return []
+    runs: list[Path] = []
+    for date_dir in output_root.iterdir():
+        if not date_dir.is_dir():
+            continue
+        for run_dir in date_dir.iterdir():
+            if run_dir.is_dir():
+                runs.append(run_dir)
+    return runs
+
+
+def _find_run_dir(output_root: Path, run_id: str) -> Path | None:
+    if not output_root.exists():
+        return None
+    for date_dir in output_root.iterdir():
+        if not date_dir.is_dir():
+            continue
+        candidate = date_dir / run_id
+        if candidate.is_dir():
+            return candidate
+    return None
 
 
 @lru_cache(maxsize=8)
@@ -154,14 +178,10 @@ def _run_timestamp(run_dir: Path, session_meta: dict[str, Any]) -> str:
 
 
 def list_analysis_runs(cfg: ComputeNodeConfig) -> list[dict[str, Any]]:
-    _backend_root, output_root, _candidate_root, pattern_root = _analysis_roots(cfg)
-    if not output_root.exists():
-        return []
+    _backend_root, output_root, pattern_root = _analysis_roots(cfg)
 
     items: list[dict[str, Any]] = []
-    for run_dir in output_root.iterdir():
-        if not run_dir.is_dir():
-            continue
+    for run_dir in _iter_run_dirs(output_root):
         run_id = run_dir.name
         session_meta = _load_session_meta(run_dir)
         dance_id = _infer_dance_id(run_id, session_meta, pattern_root)
@@ -205,29 +225,16 @@ def _feedback_by_window(run_dir: Path) -> dict[int, dict[str, Any]]:
     return feedback_map
 
 
-def _resolve_stage7_files(
-    run_dir: Path,
-    sequence_name: str,
-    candidate_root: Path,
-    summary: dict[str, Any],
-) -> list[Path]:
+def _resolve_stage7_files(run_dir: Path, sequence_name: str) -> list[Path]:
     analysis_root = run_dir / "analysis" / "stage7"
     if analysis_root.exists():
         files = sorted(analysis_root.glob("*.json"))
         if files:
             return files
 
-    summary_candidate = str(summary.get("offline_candidate_root") or "").strip()
-    if summary_candidate:
-        stage7_root = Path(summary_candidate) / "json" / "7_arms_position" / sequence_name
-        if stage7_root.exists():
-            files = sorted(stage7_root.glob("*.json"))
-            if files:
-                return files
-
-    fallback = candidate_root / "json" / "7_arms_position" / sequence_name
-    if fallback.exists():
-        return sorted(fallback.glob("*.json"))
+    pipeline_root = run_dir / "pipeline" / "json" / "7_arms_position" / sequence_name
+    if pipeline_root.exists():
+        return sorted(pipeline_root.glob("*.json"))
     return []
 
 
@@ -403,13 +410,13 @@ def _channel_points(
 
 
 def build_run_analysis(cfg: ComputeNodeConfig, run_id: str) -> dict[str, Any]:
-    backend_root, output_root, candidate_root, pattern_root = _analysis_roots(cfg)
-    run_dir = (output_root / run_id).resolve()
-    if not run_dir.exists() or not run_dir.is_dir():
-        raise FileNotFoundError(f"Missing run directory: {run_dir}")
+    backend_root, output_root, pattern_root = _analysis_roots(cfg)
+    run_dir = _find_run_dir(output_root, run_id)
+    if run_dir is None:
+        raise FileNotFoundError(f"Missing run directory: {run_id}")
+    run_dir = run_dir.resolve()
 
     session_meta = _load_session_meta(run_dir)
-    run_summary = _load_json(run_dir / "run_summary.json") if (run_dir / "run_summary.json").exists() else {}
     dance_id = _infer_dance_id(run_id, session_meta, pattern_root)
     if not dance_id:
         raise FileNotFoundError(f"Could not resolve dance_id for run: {run_id}")
@@ -422,7 +429,7 @@ def build_run_analysis(cfg: ComputeNodeConfig, run_id: str) -> dict[str, Any]:
     prompt_module = _load_prompt_module(str(backend_root / "src"))
     pattern = prompt_module.load_enriched_pattern(pattern_file)
 
-    stage7_files = _resolve_stage7_files(run_dir, sequence_name, candidate_root, run_summary)
+    stage7_files = _resolve_stage7_files(run_dir, sequence_name)
     if not stage7_files:
         raise FileNotFoundError(f"No stage7 analysis data for run: {run_id}")
 

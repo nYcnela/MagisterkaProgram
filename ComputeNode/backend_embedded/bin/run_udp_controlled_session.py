@@ -42,14 +42,10 @@ class SessionRunner:
         *,
         python_exec: str,
         output_root: Path,
-        candidate_root: Path,
-        offline_runs_root: Path,
         llm_url: str | None,
     ) -> None:
         self.python_exec = python_exec
         self.output_root = output_root
-        self.candidate_root = candidate_root
-        self.offline_runs_root = offline_runs_root
         self.llm_url = llm_url
 
         self.proc: Optional[subprocess.Popen[str]] = None
@@ -65,6 +61,9 @@ class SessionRunner:
         for line in proc.stdout:
             print(f"{prefix}{line.rstrip()}")
 
+    def _dated_output_root(self) -> Path:
+        return self.output_root / time.strftime("%Y-%m-%d")
+
     def _write_session_meta(
         self,
         *,
@@ -74,7 +73,7 @@ class SessionRunner:
         pattern_file: Path,
         control_payload: dict[str, Any],
     ) -> None:
-        run_root = self.output_root / run_id
+        run_root = self._dated_output_root() / run_id
         run_root.mkdir(parents=True, exist_ok=True)
         payload = {
             "session_id": session_id,
@@ -162,11 +161,7 @@ class SessionRunner:
             str(pattern_file),
             "--model-inputs-only",
             "--output-root",
-            str(self.output_root),
-            "--candidate-root",
-            str(self.candidate_root),
-            "--offline-runs-root",
-            str(self.offline_runs_root),
+            str(self._dated_output_root()),
             "--run-id",
             run_id,
             "--live-z-threshold",
@@ -411,8 +406,6 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--llm-url", default=None, help="Optional LLM URL, e.g. http://127.0.0.1:8000")
 
     ap.add_argument("--output-root", type=Path, default=PROJECT_ROOT / "data/tmp/realtime_controlled")
-    ap.add_argument("--candidate-root", type=Path, default=Path("/tmp/realtime_controlled_candidate"))
-    ap.add_argument("--offline-runs-root", type=Path, default=Path("/tmp/realtime_controlled_runs"))
 
     ap.add_argument("--udp-host", default="0.0.0.0", help="Default data UDP host for child receiver")
     ap.add_argument("--udp-port", type=int, default=5005, help="Default data UDP port for child receiver")
@@ -437,18 +430,8 @@ def main() -> int:
     args = parse_args()
 
     output_root = args.output_root if args.output_root.is_absolute() else (PROJECT_ROOT / args.output_root)
-    candidate_root = args.candidate_root if args.candidate_root.is_absolute() else (PROJECT_ROOT / args.candidate_root)
-    offline_runs_root = (
-        args.offline_runs_root if args.offline_runs_root.is_absolute() else (PROJECT_ROOT / args.offline_runs_root)
-    )
-
     output_root = output_root.resolve()
-    candidate_root = candidate_root.resolve()
-    offline_runs_root = offline_runs_root.resolve()
-
     output_root.mkdir(parents=True, exist_ok=True)
-    candidate_root.mkdir(parents=True, exist_ok=True)
-    offline_runs_root.mkdir(parents=True, exist_ok=True)
 
     defaults = RuntimeDefaults(
         udp_host=args.udp_host,
@@ -469,8 +452,6 @@ def main() -> int:
     runner = SessionRunner(
         python_exec=args.python_exec,
         output_root=output_root,
-        candidate_root=candidate_root,
-        offline_runs_root=offline_runs_root,
         llm_url=args.llm_url,
     )
     server = ControlServer(

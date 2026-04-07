@@ -589,18 +589,6 @@ def main() -> int:
         default=PROJECT_ROOT / "data/tmp/realtime_e2e",
         help="Root folder for test artifacts",
     )
-    ap.add_argument(
-        "--candidate-root",
-        type=Path,
-        default=None,
-        help="Optional override for offline candidate artifacts (use /tmp for faster I/O).",
-    )
-    ap.add_argument(
-        "--offline-runs-root",
-        type=Path,
-        default=None,
-        help="Optional override for offline runner logs.",
-    )
     ap.add_argument("--run-id", default=None, help="Custom run id; default timestamp")
     args = ap.parse_args()
 
@@ -610,15 +598,7 @@ def main() -> int:
     raw_root = capture_root / "raw" / args.sequence_name
     manifest_path = capture_root / "windows_manifest.jsonl"
 
-    candidate_root = run_root / "pipeline_candidate"
-    if args.candidate_root is not None:
-        candidate_root = args.candidate_root if args.candidate_root.is_absolute() else (PROJECT_ROOT / args.candidate_root)
-        candidate_root = candidate_root.resolve()
-
-    offline_runs_root = run_root / "offline_runs"
-    if args.offline_runs_root is not None:
-        offline_runs_root = args.offline_runs_root if args.offline_runs_root.is_absolute() else (PROJECT_ROOT / args.offline_runs_root)
-        offline_runs_root = offline_runs_root.resolve()
+    candidate_root = run_root / "pipeline"
 
     prompt_windows_root = run_root / "prompts" / "window_records"
     prompt_desc_root = run_root / "prompts" / "descriptive"
@@ -640,7 +620,7 @@ def main() -> int:
         elif not model_inputs_path.is_absolute():
             model_inputs_path = (PROJECT_ROOT / model_inputs_path).resolve()
 
-    dirs_to_make = [raw_root, offline_runs_root]
+    dirs_to_make = [raw_root]
     analysis_stage7_root = run_root / "analysis" / "stage7"
     analysis_window_records_root = run_root / "analysis" / "window_records" / pattern_name / "windows"
     if args.model_inputs_only:
@@ -915,8 +895,7 @@ def main() -> int:
             "model_inputs_path": str(model_inputs_path.resolve()) if model_inputs_path else None,
             "llm_url": args.llm_url,
             "feedback_path": str(feedback_path.resolve()) if (args.llm_url and feedback_path is not None) else None,
-            "offline_candidate_root": str(candidate_root.resolve()),
-            "offline_runs_root": str(offline_runs_root.resolve()),
+            "pipeline_root": str(candidate_root.resolve()),
             "processing_seconds_avg": (sum(proc_vals) / len(proc_vals)) if proc_vals else None,
             "processing_seconds_max": max(proc_vals) if proc_vals else None,
             "latency_seconds_avg": (sum(lat_vals) / len(lat_vals)) if lat_vals else None,
@@ -952,7 +931,7 @@ def main() -> int:
         "segment_bounds",
         "arms_metrics",
         "--log-dir",
-        str(offline_runs_root),
+        str(run_root / "offline_runs"),
     ]
     _run_subprocess(offline_cmd, PROJECT_ROOT)
 
@@ -1002,7 +981,7 @@ def main() -> int:
         "run_root": str(run_root.resolve()),
         "mode": "batch_prompts",
         "windows_written": windows_written,
-        "offline_candidate_root": str(candidate_root.resolve()),
+        "pipeline_root": str(candidate_root.resolve()),
         "window_records_root": str(prompt_windows_root.resolve()),
         "prompt_descriptive_root": str(prompt_desc_root.resolve()),
         "prompts_9_2_index": str(prompt_9_2_index_path.resolve()),
