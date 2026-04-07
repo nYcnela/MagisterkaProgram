@@ -100,7 +100,7 @@ def _analysis_roots(cfg: ComputeNodeConfig) -> tuple[Path, Path, Path, Path]:
     backend_root = discover_backend_root(cfg.backend_root)
     output_root = resolve_under_root(cfg.output_root, backend_root)
     candidate_root = resolve_under_root(cfg.candidate_root, backend_root)
-    pattern_root = backend_root / "data/json/manual/pipeline/8_patterns/enriched"
+    pattern_root = backend_root / "dance_patterns"
     return backend_root, output_root, candidate_root, pattern_root
 
 

@@ -19,8 +19,8 @@ FULL_APP_DIR = "FullApp"
 COMPUTE_NODE_DIR = "ComputeNode"
 REMOTE_GUI_DIR = "RemoteGUI"
 LEGACY_DIRS = ("ComputeNode_K1", "RemoteGUI_K2")
-WINDOWS_DIR = "windows"
-MAC_DIR = "mac"
+WINDOWS_DIR = "installers/windows"
+MAC_DIR = "installers/mac"
 
 
 def _remove(path: Path) -> None:
@@ -84,7 +84,7 @@ def _compute_node_install_bat() -> str:
     return r"""@echo off
 chcp 65001 >nul 2>&1
 set "SCRIPT_DIR=%~dp0"
-for %%I in ("%SCRIPT_DIR%..") do set "ROOT_DIR=%%~fI"
+for %%I in ("%SCRIPT_DIR%..\..") do set "ROOT_DIR=%%~fI"
 cd /d "%ROOT_DIR%"
 
 set "TORCH_CHANNEL=%REALTIME_STUDIO_TORCH_CHANNEL%"
@@ -140,11 +140,11 @@ def _compute_node_start_bat() -> str:
     return r"""@echo off
 chcp 65001 >nul 2>&1
 set "SCRIPT_DIR=%~dp0"
-for %%I in ("%SCRIPT_DIR%..") do set "ROOT_DIR=%%~fI"
+for %%I in ("%SCRIPT_DIR%..\..") do set "ROOT_DIR=%%~fI"
 cd /d "%ROOT_DIR%"
 
 if not exist ".venv\Scripts\python.exe" (
-    echo [BLAD] Brak .venv — uruchom najpierw windows\setup_compute_node.bat
+    echo [BLAD] Brak .venv — uruchom najpierw installers\windows\setup_compute_node.bat
     pause
     exit /b 1
 )
@@ -160,7 +160,7 @@ def _compute_node_setup_sh() -> str:
     return """#!/bin/bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT_DIR"
 
 echo "========================================"
@@ -237,11 +237,11 @@ def _compute_node_start_sh() -> str:
     return """#!/bin/bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT_DIR"
 
 if [ ! -f ".venv/bin/python" ]; then
-  echo "[BLAD] Brak .venv — uruchom najpierw mac/setup_compute_node.sh"
+  echo "[BLAD] Brak .venv — uruchom najpierw installers/mac/setup_compute_node.sh"
   exit 1
 fi
 
@@ -257,7 +257,7 @@ def _remote_gui_install_bat() -> str:
     return r"""@echo off
 chcp 65001 >nul 2>&1
 set "SCRIPT_DIR=%~dp0"
-for %%I in ("%SCRIPT_DIR%..") do set "ROOT_DIR=%%~fI"
+for %%I in ("%SCRIPT_DIR%..\..") do set "ROOT_DIR=%%~fI"
 cd /d "%ROOT_DIR%"
 
 if not exist ".venv\Scripts\python.exe" (
@@ -287,11 +287,11 @@ def _remote_gui_start_bat() -> str:
     return r"""@echo off
 chcp 65001 >nul 2>&1
 set "SCRIPT_DIR=%~dp0"
-for %%I in ("%SCRIPT_DIR%..") do set "ROOT_DIR=%%~fI"
+for %%I in ("%SCRIPT_DIR%..\..") do set "ROOT_DIR=%%~fI"
 cd /d "%ROOT_DIR%"
 
 if not exist ".venv\Scripts\python.exe" (
-    echo [BLAD] Brak .venv — uruchom najpierw windows\setup_remote_gui.bat
+    echo [BLAD] Brak .venv — uruchom najpierw installers\windows\setup_remote_gui.bat
     pause
     exit /b 1
 )
@@ -306,7 +306,7 @@ def _remote_gui_setup_sh() -> str:
     return """#!/bin/bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT_DIR"
 
 echo "========================================"
@@ -343,11 +343,11 @@ def _remote_gui_start_sh() -> str:
     return """#!/bin/bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT_DIR"
 
 if [ ! -f ".venv/bin/python" ]; then
-  echo "[BLAD] Brak .venv — uruchom najpierw mac/setup_remote_gui.sh"
+  echo "[BLAD] Brak .venv — uruchom najpierw installers/mac/setup_remote_gui.sh"
   exit 1
 fi
 
@@ -364,7 +364,7 @@ def _write_open_config_bat(path: Path, config_name: str) -> None:
         f"""@echo off
 chcp 65001 >nul 2>&1
 set "SCRIPT_DIR=%~dp0"
-for %%I in ("%SCRIPT_DIR%..") do set "ROOT_DIR=%%~fI"
+for %%I in ("%SCRIPT_DIR%..\\..") do set "ROOT_DIR=%%~fI"
 start "" notepad "%ROOT_DIR%\\{config_name}"
 """,
     )
@@ -375,7 +375,7 @@ def _write_open_config_sh(path: Path, config_name: str) -> None:
         path,
         f"""#!/bin/bash
 set -euo pipefail
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 open -a TextEdit "$ROOT_DIR/{config_name}"
 """,
     )

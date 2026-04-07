@@ -10,8 +10,8 @@ from .settings import StudioConfig
 
 def _looks_like_backend_root(root: Path) -> bool:
     return (
-        (root / "apps/realtime/run_udp_e2e_test.py").exists()
-        and (root / "apps/realtime/llm_server.py").exists()
+        (root / "bin/run_udp_e2e_test.py").exists()
+        and (root / "bin/llm_server.py").exists()
     )
 
 
@@ -149,7 +149,7 @@ def build_backend_command(cfg: StudioConfig, run_id: str | None = None) -> tuple
     offline_runs_root = resolve_under_root(cfg.offline_runs_root, backend_root)
 
     if cfg.session_mode:
-        script = backend_root / "apps/realtime/run_udp_controlled_session.py"
+        script = backend_root / "bin/run_udp_controlled_session.py"
         if not script.exists():
             raise FileNotFoundError(f"Missing session script: {script}")
 
@@ -195,7 +195,7 @@ def build_backend_command(cfg: StudioConfig, run_id: str | None = None) -> tuple
         if cfg.llm_enabled:
             args.extend(["--llm-url", f"http://{cfg.llm_host}:{cfg.llm_port}"])
     else:
-        script = backend_root / "apps/realtime/run_udp_e2e_test.py"
+        script = backend_root / "bin/run_udp_e2e_test.py"
         if not script.exists():
             raise FileNotFoundError(f"Missing receiver script: {script}")
 
@@ -253,7 +253,7 @@ def build_backend_command(cfg: StudioConfig, run_id: str | None = None) -> tuple
 
 def build_llm_command(cfg: StudioConfig) -> tuple[str, list[str], Path]:
     backend_root = discover_backend_root(cfg.backend_root)
-    script = backend_root / "apps/realtime/llm_server.py"
+    script = backend_root / "bin/llm_server.py"
     if not script.exists():
         raise FileNotFoundError(f"Missing LLM server script: {script}")
 

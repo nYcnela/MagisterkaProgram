@@ -9,7 +9,7 @@
   "llm_host": "127.0.0.1",
   "llm_port": 8000,
   "llm_enabled": true,
-  "llm_adapter_dir": "outputs/manual/danube_4b/model_danube_supervised/lora_adapter",
+  "llm_adapter_dir": "lora_adapters/danube_4b",
   "llm_model_id": "",
   "llm_use_4bit": true,
   "auto_start_llm_with_backend": true,

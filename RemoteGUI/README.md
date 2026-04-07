@@ -15,14 +15,14 @@ Ten wariant uruchamiasz na komputerze, ktory ma byc tylko panelem sterowania i p
 Windows:
 
 ```bat
-cd windows
+cd installers\windows
 setup_remote_gui.bat
 ```
 
 macOS / Linux:
 
 ```bash
-cd mac
+cd installers/mac
 chmod +x *.sh
 ./setup_remote_gui.sh
 ```
@@ -32,14 +32,14 @@ chmod +x *.sh
 Windows:
 
 ```bat
-cd windows
+cd installers\windows
 start_remote_gui.bat
 ```
 
 macOS / Linux:
 
 ```bash
-cd mac
+cd installers/mac
 ./start_remote_gui.sh
 ```
 

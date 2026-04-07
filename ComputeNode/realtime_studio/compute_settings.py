@@ -25,7 +25,7 @@ class ComputeNodeConfig:
     llm_host: str = "127.0.0.1"
     llm_port: int = 8000
     llm_enabled: bool = True
-    llm_adapter_dir: str = "outputs/manual/danube_4b/model_danube_supervised/lora_adapter"
+    llm_adapter_dir: str = "lora_adapters/danube_4b"
     llm_model_id: str = ""
     llm_use_4bit: bool = True
     auto_start_llm_with_backend: bool = True
@@ -45,9 +45,9 @@ class ComputeNodeConfig:
     live_major_order_threshold: int = 60
     live_emit_minor_order_text: bool = False
 
-    output_root: str = "data/tmp/realtime_e2e"
-    candidate_root: str = "data/tmp/realtime_candidate"
-    offline_runs_root: str = "data/tmp/offline_runs"
+    output_root: str = "../runtime/realtime_e2e"
+    candidate_root: str = "../runtime/realtime_candidate"
+    offline_runs_root: str = "../runtime/offline_runs"
 
     session_mode: bool = True
     auto_control_port: bool = True

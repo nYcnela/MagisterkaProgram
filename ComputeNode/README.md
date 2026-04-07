@@ -15,14 +15,14 @@ Ten wariant uruchamiasz na mocniejszym komputerze, na ktorym maja liczyc sie bac
 Windows:
 
 ```bat
-cd windows
+cd installers\windows
 setup_compute_node.bat
 ```
 
 macOS / Linux:
 
 ```bash
-cd mac
+cd installers/mac
 chmod +x *.sh
 ./setup_compute_node.sh
 ```
@@ -32,14 +32,14 @@ chmod +x *.sh
 Windows:
 
 ```bat
-cd windows
+cd installers\windows
 start_compute_node.bat
 ```
 
 macOS / Linux:
 
 ```bash
-cd mac
+cd installers/mac
 ./start_compute_node.sh
 ```
 

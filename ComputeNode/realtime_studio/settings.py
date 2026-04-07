@@ -29,7 +29,7 @@ class StudioConfig:
     llm_host: str = "127.0.0.1"
     llm_port: int = 8000
 
-    llm_adapter_dir: str = "outputs/manual/danube_4b/model_danube_supervised/lora_adapter"
+    llm_adapter_dir: str = "lora_adapters/danube_4b"
     llm_model_id: str = ""
     llm_use_4bit: bool = True
     auto_start_llm: bool = True
@@ -50,9 +50,9 @@ class StudioConfig:
     live_major_order_threshold: int = 60
     live_emit_minor_order_text: bool = False
 
-    output_root: str = "data/tmp/realtime_e2e"
-    candidate_root: str = "data/tmp/realtime_candidate"
-    offline_runs_root: str = "data/tmp/offline_runs"
+    output_root: str = "../runtime/realtime_e2e"
+    candidate_root: str = "../runtime/realtime_candidate"
+    offline_runs_root: str = "../runtime/offline_runs"
 
     auto_control_port: bool = True
     auto_detect_dance: bool = True
@@ -61,7 +61,7 @@ class StudioConfig:
     def resolved_pattern_file(self) -> str:
         if self.pattern_file.strip():
             return self.pattern_file.strip()
-        return f"data/json/manual/pipeline/8_patterns/enriched/{self.dance_id}_pattern.json"
+        return f"dance_patterns/{self.dance_id}_pattern.json"
 
 
 def _sanitize_dirname(text: str) -> str:

@@ -6,9 +6,6 @@ __pycache__/
 *.pyc
 *.pyo
 
-# Temporary runtime data
-backend_embedded/data/tmp/
-
 # Settings (local per machine)
 settings.json
 
