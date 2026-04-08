@@ -76,6 +76,9 @@ class RemoteNodeClient(QObject):
     def stop_session(self, payload: dict | None = None) -> None:
         self._request_json("POST", "/session/stop", payload or {"reason": "remote_gui"}, "session_stop")
 
+    def set_dancer(self, first_name: str, last_name: str) -> None:
+        self._request_json("POST", "/dancer/set", {"dancer_first_name": first_name, "dancer_last_name": last_name}, "set_dancer")
+
     def fetch_analysis_runs(self) -> None:
         self._request_json("GET", "/analysis/runs", None, "analysis_runs")
 

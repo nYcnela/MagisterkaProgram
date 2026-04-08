@@ -4,7 +4,8 @@ from dataclasses import asdict
 import time
 from typing import Any
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QRect, QTimer
+from PySide6.QtGui import QColor, QFont, QPainter, QPen, QBrush, QPaintEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -24,6 +25,7 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QSplitter,
     QStackedWidget,
+    QSizePolicy,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -60,6 +62,120 @@ _NAV_ITEMS = [
     ("\u2261", "Analiza"),
     ("\u2139", "Info"),
 ]
+
+
+class _SeqDiagram(QWidget):
+    """Sequence diagram: VR → RemoteGUI → ComputeNode session flow."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setMinimumHeight(520)
+
+    def paintEvent(self, _event: QPaintEvent) -> None:  # noqa: N802
+        from PySide6.QtGui import QPolygon
+        from PySide6.QtCore import QPoint
+
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        W, H = self.width(), self.height()
+
+        C = {
+            "C1":     QColor("#0f2744"),
+            "C2":     QColor("#0f2a1a"),
+            "C3":     QColor("#2a1a2a"),
+            "border": QColor("#334155"),
+            "life":   QColor("#334155"),
+            "arrow":  QColor("#38bdf8"),
+            "data":   QColor("#4ade80"),
+            "fb":     QColor("#fb923c"),
+            "end":    QColor("#f87171"),
+            "hdr":    QColor("#e2e8f0"),
+            "tag":    QColor("#64748b"),
+            "txt":    QColor("#94a3b8"),
+            "sep":    QColor("#1e293b"),
+        }
+
+        x3 = int(W * 0.13)
+        x1 = int(W * 0.50)
+        x2 = int(W * 0.87)
+
+        BW, BH, BY = 118, 46, 8
+
+        def box(cx: int, ck: str, tag: str, name: str) -> None:
+            bx = cx - BW // 2
+            p.setPen(QPen(C["border"], 1))
+            p.setBrush(QBrush(C[ck]))
+            p.drawRoundedRect(bx, BY, BW, BH, 5, 5)
+            p.setPen(C["tag"])
+            p.setFont(QFont("Arial", 7))
+            p.drawText(bx + 8, BY + 14, tag)
+            p.setPen(C["hdr"])
+            p.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+            p.drawText(bx + 8, BY + 32, name)
+
+        box(x3, "C3", "KOMPUTER 3", "VR klient")
+        box(x1, "C1", "KOMPUTER 1", "RemoteGUI")
+        box(x2, "C2", "KOMPUTER 2", "ComputeNode")
+
+        life_y0 = BY + BH
+        p.setPen(QPen(C["life"], 1, Qt.PenStyle.DashLine))
+        for cx in (x3, x1, x2):
+            p.drawLine(cx, life_y0, cx, H - 8)
+
+        def arrow(y: int, fx: int, tx: int, label: str, sub: str, ck: str) -> None:
+            col = C[ck]
+            right = tx > fx
+            p.setPen(QPen(col, 1))
+            p.setBrush(QBrush(col))
+            p.drawLine(fx, y, tx, y)
+            d = 6 if right else -6
+            p.drawPolygon(QPolygon([QPoint(tx, y), QPoint(tx - d, y - 3), QPoint(tx - d, y + 3)]))
+            mid = (fx + tx) // 2
+            p.setFont(QFont("Arial", 8, QFont.Weight.Bold))
+            p.setPen(col)
+            p.drawText(mid - 44, y - 5, label)
+            p.setFont(QFont("Arial", 7))
+            p.setPen(C["txt"])
+            p.drawText(mid - 44, y + 13, sub)
+
+        def activity(y: int, cx: int, label: str, ck: str) -> None:
+            aw = 88
+            p.setPen(QPen(C["border"], 1))
+            p.setBrush(QBrush(C[ck]))
+            p.drawRoundedRect(cx - aw // 2, y - 11, aw, 22, 4, 4)
+            p.setPen(C["hdr"])
+            p.setFont(QFont("Arial", 8))
+            fm = p.fontMetrics()
+            p.drawText(cx - fm.horizontalAdvance(label) // 2, y + 4, label)
+
+        def separator(y: int, label: str) -> None:
+            p.setPen(QPen(C["sep"], 1, Qt.PenStyle.SolidLine))
+            p.drawLine(12, y, W - 12, y)
+            p.setFont(QFont("Arial", 7))
+            p.setPen(C["tag"])
+            p.drawText(14, y - 3, label)
+
+        y = life_y0 + 24
+        S = 42
+
+        arrow(y, x3, x1, "session_prepare", "UDP",            "arrow"); y += S
+        arrow(y, x3, x2, "session_prepare", "UDP",            "arrow"); y += S
+        activity(y, x3, "3 · 2 · 1 · 0",   "C3");                       y += S
+        arrow(y, x1, x2, "session_start",   "HTTP → UDP 5006","arrow"); y += S
+
+        separator(y, "– sesja aktywna –"); y += 16
+
+        arrow(y, x1, x2, "dane ruchu",  "UDP 5005  (100 Hz)", "data"); y += S
+        arrow(y, x2, x1, "feedback",    "WS 8010",            "fb");   y += S
+        arrow(y, x2, x3, "feedback",    "UDP 5007",           "fb");   y += S
+
+        separator(y, "– koniec sesji –"); y += 16
+
+        arrow(y, x3, x2, "session_end",  "UDP",               "end");  y += S
+        arrow(y, x2, x3, "summary",      "avg score  UDP 5007","fb")
+
+        p.end()
 
 
 class RemoteMainWindow(QMainWindow):
@@ -124,7 +240,6 @@ class RemoteMainWindow(QMainWindow):
         self.left_content_stack = QStackedWidget()
         self.left_content_stack.addWidget(self._session_page())     # 0
         self.left_content_stack.addWidget(self._analysis_page())    # 1
-        self.left_content_stack.addWidget(self._info_page())        # 2
 
         self._right_default = QWidget()
         self._right_default_layout = QVBoxLayout(self._right_default)
@@ -144,7 +259,8 @@ class RemoteMainWindow(QMainWindow):
         # Main content switcher
         self._main_content = QStackedWidget()
         self._main_content.addWidget(self._conn_view)      # 0
-        self._main_content.addWidget(self._splitter_view)   # 1
+        self._main_content.addWidget(self._splitter_view)  # 1
+        self._main_content.addWidget(self._info_page())    # 2
         main_layout.addWidget(self._main_content, 1)
 
         root_layout.addWidget(main_area, 1)
@@ -262,9 +378,13 @@ class RemoteMainWindow(QMainWindow):
         form.addRow("", self.auto_connect_check)
         layout.addLayout(form)
 
+        layout.addStretch(1)
+
         self.node_url_label = QLabel("")
         self.node_url_label.setObjectName("Hint")
         layout.addWidget(self.node_url_label)
+
+        layout.addStretch(1)
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
@@ -276,8 +396,7 @@ class RemoteMainWindow(QMainWindow):
         btn_row.addWidget(self.refresh_btn)
         layout.addLayout(btn_row)
 
-        layout.addStretch(1)
-
+        card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         return card
 
     def _session_page(self) -> QScrollArea:
@@ -302,12 +421,8 @@ class RemoteMainWindow(QMainWindow):
         self.dance_id_combo.setEditable(False)
         self.dance_id_combo.addItems(DANCE_CHOICES)
         self.sequence_name_edit = QLineEdit()
-        self.gender_combo = self._styled_combo()
-        self.gender_combo.addItems(["female", "male"])
-        self.gender_combo.setMaxVisibleItems(10)
         form.addRow("ID tanca", self.dance_id_combo)
         form.addRow("Sekwencja", self.sequence_name_edit)
-        form.addRow("Plec", self.gender_combo)
         session_layout.addLayout(form)
 
         # Participant card
@@ -320,6 +435,15 @@ class RemoteMainWindow(QMainWindow):
         pform.addRow("Imie", self.dancer_first_name_edit)
         pform.addRow("Nazwisko", self.dancer_last_name_edit)
         part_layout.addLayout(pform)
+
+        self.dancer_path_preview = QLabel()
+        self.dancer_path_preview.setObjectName("Hint")
+        self.dancer_path_preview.setWordWrap(True)
+        part_layout.addWidget(self.dancer_path_preview)
+
+        self.apply_dancer_btn = QPushButton("Zapisuj do katalogu osoby")
+        self.apply_dancer_btn.setObjectName("SubtleBtn")
+        part_layout.addWidget(self.apply_dancer_btn)
 
         # Thresholds card
         thresh_card, thresh_layout = self._card("Progi Live")
@@ -356,7 +480,7 @@ class RemoteMainWindow(QMainWindow):
         row2.addWidget(self.stop_session_btn)
         actions_layout.addLayout(row2)
 
-        return self._scroll_page(llm_card, session_card, part_card, thresh_card, actions_card)
+        return self._scroll_page(session_card, part_card, thresh_card, actions_card, llm_card)
 
     def _analysis_page(self) -> QScrollArea:
         card, layout = self._card("Analiza runow")
@@ -413,16 +537,170 @@ class RemoteMainWindow(QMainWindow):
         return self._scroll_page(card)
 
     def _info_page(self) -> QScrollArea:
-        card, layout = self._card("Tryb pracy")
-        hint = QLabel(
-            "RemoteGUI jest tylko klientem sterujacym.\n"
-            "Backend, LLM i dane z Kalmana pracuja na ComputeNode.\n"
-            "Logi i feedback przychodza tu przez WebSocket."
-        )
-        hint.setObjectName("Hint")
-        hint.setWordWrap(True)
-        layout.addWidget(hint)
-        return self._scroll_page(card)
+        C1 = "#0f2744"   # Komputer 1 — niebieski
+        C2 = "#0f2a1a"   # Komputer 2 — zielony
+        C3 = "#2a1a2a"   # Komputer 3 — fioletowy
+        BORDER = "#334155"
+        ARROW_CSS = "color:#38bdf8; font-size:11px; background:transparent; padding:0 0 0 16px;"
+        TAG_CSS = "color:#475569; font-size:10px; background:transparent; border:none; padding:0;"
+        NAME_CSS = "color:#e2e8f0; font-size:12px; font-weight:bold; background:transparent; border:none; padding:0;"
+        LINE_CSS = "color:#94a3b8; font-size:11px; background:transparent; border:none; padding:0;"
+
+        def node(tag: str, name: str, lines: list[str], color: str) -> QFrame:
+            f = QFrame()
+            f.setStyleSheet(
+                f"QFrame{{background:{color};border:1px solid {BORDER};border-radius:6px;}}"
+            )
+            vl = QVBoxLayout(f)
+            vl.setContentsMargins(12, 8, 12, 10)
+            vl.setSpacing(2)
+            t = QLabel(tag); t.setStyleSheet(TAG_CSS); vl.addWidget(t)
+            n = QLabel(name); n.setStyleSheet(NAME_CSS); vl.addWidget(n)
+            if lines:
+                vl.addSpacing(3)
+            for line in lines:
+                l = QLabel(line); l.setStyleSheet(LINE_CSS); vl.addWidget(l)
+            return f
+
+        def arrow(text: str) -> QLabel:
+            lbl = QLabel(text)
+            lbl.setStyleSheet(ARROW_CSS)
+            return lbl
+
+        def sep(text: str) -> QLabel:
+            lbl = QLabel(text)
+            lbl.setStyleSheet(
+                "color:#475569;font-size:10px;letter-spacing:2px;"
+                "background:transparent;padding:8px 0 4px 0;"
+            )
+            return lbl
+
+        seq_card, seq_layout = self._card("Przebieg sesji")
+        seq_layout.addWidget(_SeqDiagram())
+
+        flow_card, flow_layout = self._card("Przeplyw danych")
+
+        flow_layout.addWidget(sep("— INICJALIZACJA SESJI —"))
+        flow_layout.addWidget(node(
+            "KOMPUTER 3", "VR klient",
+            ["inicjuje sesje — wysyla session_prepare"], C3,
+        ))
+        prepare_row = QHBoxLayout()
+        prepare_row.setSpacing(8)
+        prepare_row.addWidget(node(
+            "KOMPUTER 1", "RemoteGUI",
+            ["odbiera session_prepare", "przekazuje do ComputeNode"],
+            C1,
+        ))
+        prepare_row.addWidget(node(
+            "KOMPUTER 2", "ComputeNode",
+            ["odbiera session_prepare", "gotowy na dane"],
+            C2,
+        ))
+        flow_layout.addLayout(prepare_row)
+        flow_layout.addWidget(arrow("↓  session_start  (HTTP → UDP 5006)  ·  K1 → K2"))
+        flow_layout.addWidget(sep("— PRZESYLANIE DANYCH —"))
+        flow_layout.addWidget(node(
+            "KOMPUTER 1", "Vicon / Kalman",
+            ["nadajnik danych ruchu  (100 Hz)"], C1,
+        ))
+        flow_layout.addWidget(arrow("↓  UDP 5005"))
+        flow_layout.addWidget(node(
+            "KOMPUTER 2 — ComputeNode", "backend_embedded",
+            [
+                "• zbiera pakiety w okna czasowe (np. 4 s / co 3 s)",
+                "• oblicza katy, normalizuje, downsampluje",
+                "• segmentuje kroki, liczy metryki ramion",
+                "• buduje prompt i wysyla do LLM",
+            ], C2,
+        ))
+        flow_layout.addWidget(arrow("↓  HTTP POST  localhost:8000/generate"))
+        flow_layout.addWidget(node(
+            "KOMPUTER 2 — ComputeNode", "llm_server",
+            [
+                "• Danube3-4B + QLoRA  nf4 / 4-bit",
+                "• zwraca JSON: { feedback, score, latency_s }",
+            ], C2,
+        ))
+        flow_layout.addWidget(arrow("↓  stdout  [FEEDBACK] ..."))
+        flow_layout.addWidget(node(
+            "KOMPUTER 2 — ComputeNode", "node_manager",
+            [
+                "• parsuje linie [FEEDBACK] z backendu",
+                "• WS 8010  →  RemoteGUI  (logi, feedback w trakcie sesji)",
+                "• UDP 5007  →  VR klient  (feedback w trakcie sesji)",
+                "• po session_end: wysyla summary z avg score  →  UDP 5007  →  VR",
+            ], C2,
+        ))
+
+        out_row = QHBoxLayout()
+        out_row.setSpacing(8)
+        out_row.addWidget(node("KOMPUTER 1", "RemoteGUI", ["eventy WS 8010", "logi i feedback"], C1))
+        out_row.addWidget(node("KOMPUTER 3", "VR klient", ["UDP 5007", "wyswietla feedback"], C3))
+        flow_layout.addLayout(out_row)
+
+        flow_layout.addWidget(sep("— ZAKONCZENIE SESJI —"))
+        flow_layout.addWidget(node(
+            "KOMPUTER 3", "VR klient",
+            ["konczy sesje — wysyla session_end  →  UDP 5006  →  K2"], C3,
+        ))
+        flow_layout.addWidget(arrow("↓  session_end  →  ComputeNode"))
+        flow_layout.addWidget(node(
+            "KOMPUTER 2 — ComputeNode", "node_manager",
+            [
+                "• zatrzymuje backend i zapis danych",
+                "• oblicza sredni wynik z calej sesji",
+                "• wysyla summary (avg score)  →  UDP 5007  →  VR",
+            ], C2,
+        ))
+        flow_layout.addWidget(arrow("↓  summary { avg_score }  →  UDP 5007"))
+        flow_layout.addWidget(node(
+            "KOMPUTER 3", "VR klient",
+            ["wyswietla podsumowanie z srednim wynikiem"], C3,
+        ))
+
+        ctrl_card, ctrl_layout = self._card("Sterowanie")
+        ctrl_layout.addWidget(node(
+            "KOMPUTER 1", "RemoteGUI  →  ComputeNode",
+            [
+                "• HTTP 8010  →  node_manager  (start/stop backendu i LLM)",
+                "• HTTP 8010  →  node_manager  →  UDP 5006  →  backend",
+                "  (session_prepare / session_start / session_end)",
+                "• WebSocket 8010  ←  eventy, logi, feedback",
+            ], C1,
+        ))
+
+        startup_card, startup_layout = self._card("Kolejnosc uruchamiania")
+        for step, desc in [
+            ("1.  Start backend",
+             "Uruchamia run_udp_controlled_session. Nasluchuje na UDP 5006,\n"
+             "czeka na komendy sesji. LLM mozna uruchomic razem (auto-start)\n"
+             "lub osobno przyciskiem 'Uruchom LLM'."),
+            ("2.  Ustaw osobe  (opcjonalnie)",
+             "Wpisz imie i nazwisko, kliknij 'Zapisuj do katalogu osoby'.\n"
+             "Backend zapamietuje kontekst — kolejne sesje trafiaja\n"
+             "do podkatalogu z ta osoba w runtime/realtime_e2e/."),
+            ("3.  Start sesji",
+             "Kliknij 'Start sesji' lub wyslij przez UDP:\n"
+             "session_prepare  →  session_start  →  [dane UDP 5005]  →  session_end"),
+        ]:
+            row = QHBoxLayout()
+            row.setSpacing(10)
+            step_lbl = QLabel(step)
+            step_lbl.setStyleSheet(
+                "color:#38bdf8;font-size:11px;font-weight:bold;"
+                "background:transparent;min-width:160px;max-width:160px;"
+            )
+            step_lbl.setAlignment(Qt.AlignmentFlag.AlignTop)
+            desc_lbl = QLabel(desc)
+            desc_lbl.setStyleSheet("color:#94a3b8;font-size:11px;background:transparent;")
+            desc_lbl.setWordWrap(True)
+            row.addWidget(step_lbl)
+            row.addWidget(desc_lbl, 1)
+            startup_layout.addLayout(row)
+            startup_layout.addSpacing(4)
+
+        return self._scroll_page(seq_card, flow_card, ctrl_card, startup_card)
 
     # ── Right panel ───────────────────────────────────────
 
@@ -435,7 +713,29 @@ class RemoteMainWindow(QMainWindow):
         return panel
 
     def _feedback_card(self) -> QFrame:
-        card, layout = self._card("Feedback")
+        card = QFrame()
+        card.setObjectName("Card")
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(8)
+        header_row = QHBoxLayout()
+        header_row.setContentsMargins(0, 0, 0, 0)
+        title = QLabel("Feedback")
+        title.setObjectName("SectionTitle")
+        header_row.addWidget(title)
+        header_row.addStretch()
+        from PySide6.QtWidgets import QApplication, QStyle
+        clear_btn = QPushButton()
+        clear_btn.setIcon(QApplication.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon))
+        clear_btn.setToolTip("Wyczysc feedback")
+        clear_btn.setFixedSize(40, 40)
+        clear_btn.setStyleSheet(
+            "QPushButton{border:none;background:#7f1d1d;border-radius:3px;padding:2px;margin:5px;}"
+            "QPushButton:hover{background:#b91c1c;}"
+        )
+        clear_btn.clicked.connect(lambda: self.feedback_view.clear())
+        header_row.addWidget(clear_btn)
+        layout.addLayout(header_row)
         self.feedback_view = QTextEdit()
         self.feedback_view.setReadOnly(True)
         self.feedback_view.setMinimumHeight(50)
@@ -499,13 +799,23 @@ class RemoteMainWindow(QMainWindow):
             self._conn_top_row.addWidget(self._feedback_frame, 5)
             self._conn_layout.addWidget(self._log_frame, 1)
             self._main_content.setCurrentIndex(0)
+            QTimer.singleShot(0, lambda: self._conn_controls.setMinimumHeight(
+                self._feedback_frame.sizeHint().height()
+            ))
         elif index == 2:
             # Analysis: controls left, chart right (no feedback/log visible)
             self.left_content_stack.setCurrentIndex(1)
             self.right_stack.setCurrentIndex(1)
             self._main_content.setCurrentIndex(1)
+            def _fix_analysis_splitter():
+                total = self._splitter.width() or 800
+                self._splitter.setSizes([total * 3 // 8, total * 5 // 8])
+            QTimer.singleShot(0, _fix_analysis_splitter)
+        elif index == 3:
+            # Info: osobny widok pelna szerokosc, bez splittera
+            self._main_content.setCurrentIndex(2)
         else:
-            # Session (1) / Info (3): controls left, feedback+log right
+            # Session (1): controls left, feedback+log right
             self._right_default_layout.addWidget(self._feedback_frame)
             self._right_default_layout.addWidget(self._log_frame)
             self._right_default_layout.setStretch(
@@ -514,8 +824,7 @@ class RemoteMainWindow(QMainWindow):
             self._right_default_layout.setStretch(
                 self._right_default_layout.indexOf(self._log_frame), 2
             )
-            stack_idx = 0 if index == 1 else 2
-            self.left_content_stack.setCurrentIndex(stack_idx)
+            self.left_content_stack.setCurrentIndex(0)
             self.right_stack.setCurrentIndex(0)
             self._main_content.setCurrentIndex(1)
             # Restore splitter proportions after reparenting
@@ -534,6 +843,9 @@ class RemoteMainWindow(QMainWindow):
         self.start_session_btn.clicked.connect(self._start_session_clicked)
         self.stop_session_btn.clicked.connect(self._stop_session_clicked)
         self.save_btn.clicked.connect(self._save_clicked)
+        self.apply_dancer_btn.clicked.connect(self._apply_dancer_clicked)
+        self.dancer_first_name_edit.textChanged.connect(self._update_dancer_preview)
+        self.dancer_last_name_edit.textChanged.connect(self._update_dancer_preview)
         self.analysis_refresh_btn.clicked.connect(self.client.fetch_analysis_runs)
         self.analysis_generate_btn.clicked.connect(self._analysis_generate_clicked)
         self.analysis_export_png_btn.clicked.connect(self._export_analysis_png)
@@ -561,7 +873,6 @@ class RemoteMainWindow(QMainWindow):
             dancer_last_name=self.dancer_last_name_edit.text().strip(),
             dance_id=self.dance_id_combo.currentText().strip(),
             sequence_name=self.sequence_name_edit.text().strip(),
-            gender=self.gender_combo.currentText(),
             step_type=_step_type_for_dance(self.dance_id_combo.currentText()),
             live_z_threshold=float(self.live_z_spin.value()),
             live_major_order_threshold=int(self.live_order_spin.value()),
@@ -579,9 +890,6 @@ class RemoteMainWindow(QMainWindow):
         if idx >= 0:
             self.dance_id_combo.setCurrentIndex(idx)
         self.sequence_name_edit.setText(self.cfg.sequence_name)
-        idx = self.gender_combo.findText(self.cfg.gender)
-        if idx >= 0:
-            self.gender_combo.setCurrentIndex(idx)
         self.live_z_spin.setValue(self.cfg.live_z_threshold)
         self.live_order_spin.setValue(self.cfg.live_major_order_threshold)
         self.analysis_theme_combo.blockSignals(True)
@@ -591,6 +899,7 @@ class RemoteMainWindow(QMainWindow):
         self.auto_start_llm_check.setChecked(self.cfg.auto_start_llm)
         self.node_url_label.setText(f"API: http://{self.cfg.node_host}:{self.cfg.node_port}")
         self.analysis_chart.set_theme(self.cfg.analysis_chart_theme)
+        self._update_dancer_preview()
 
     # ── Pill helper ───────────────────────────────────────
 
@@ -652,7 +961,6 @@ class RemoteMainWindow(QMainWindow):
         payload = {
             "dance_id": self.dance_id_combo.currentText().strip(),
             "sequence_name": self.sequence_name_edit.text().strip(),
-            "gender": self.gender_combo.currentText(),
             "step_type": _step_type_for_dance(self.dance_id_combo.currentText()),
             "session_id": f"k2_{int(time.time())}",
             "extra": extra,
@@ -662,6 +970,30 @@ class RemoteMainWindow(QMainWindow):
     def _stop_session_clicked(self) -> None:
         self.session_label.setText("Sesja: (stopping...)")
         self.client.stop_session({"reason": "remote_gui"})
+
+    def _update_dancer_preview(self) -> None:
+        first = self.dancer_first_name_edit.text().strip()
+        last = self.dancer_last_name_edit.text().strip()
+        parts = [first, last]
+        name = " ".join(p for p in parts if p)
+        date_str = time.strftime("%Y-%m-%d")
+        if name:
+            self.dancer_path_preview.setText(f"\u2192  .../realtime_e2e/{date_str}/{name}/session_...")
+        else:
+            self.dancer_path_preview.setText(f"\u2192  .../realtime_e2e/{date_str}/session_...")
+
+    def _apply_dancer_clicked(self) -> None:
+        self.cfg = self._collect_cfg()
+        save_remote_gui_config(self.cfg)
+        self._update_dancer_preview()
+        first = self.dancer_first_name_edit.text().strip()
+        last = self.dancer_last_name_edit.text().strip()
+        self.client.set_dancer(first, last)
+        name = " ".join(p for p in [first, last] if p)
+        if name:
+            self._append_log(f"[INFO] Backend: sesje beda zapisywane do katalogu: {name}")
+        else:
+            self._append_log("[INFO] Backend: sesje beda zapisywane do glownego katalogu (brak osoby).")
 
     def _save_clicked(self) -> None:
         self.cfg = self._collect_cfg()
@@ -717,6 +1049,13 @@ class RemoteMainWindow(QMainWindow):
             self.session_label.setText(f"Sesja: {session_id or '-'} / {dance_id or '-'}")
             if run_id:
                 self.run_id_label.setText(f"Run: {run_id}")
+            label = session_id or dance_id or "?"
+            ts = time.strftime("%H:%M:%S")
+            header = f"── SESJA {label}  [{ts}] ──"
+            existing = self.feedback_view.toPlainText().strip()
+            self.feedback_view.setPlainText(
+                f"{header}\n\n{existing}" if existing else header
+            )
         elif kind == "session_stopped":
             self.session_label.setText("Sesja: -")
             self.client.fetch_analysis_runs()

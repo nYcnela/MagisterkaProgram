@@ -16,3 +16,6 @@ desktop.ini
 
 # Old docs
 instrukcja.txt
+
+# JetBrains IDE
+.idea/
