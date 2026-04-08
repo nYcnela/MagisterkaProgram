@@ -103,6 +103,14 @@ def _analysis_roots(cfg: ComputeNodeConfig) -> tuple[Path, Path, Path]:
     return backend_root, output_root, pattern_root
 
 
+def _is_run_dir(path: Path) -> bool:
+    return (
+        (path / "session_meta.json").exists()
+        or (path / "capture").is_dir()
+        or (path / "run_summary.json").exists()
+    )
+
+
 def _iter_run_dirs(output_root: Path) -> list[Path]:
     if not output_root.exists():
         return []
@@ -110,9 +118,16 @@ def _iter_run_dirs(output_root: Path) -> list[Path]:
     for date_dir in output_root.iterdir():
         if not date_dir.is_dir():
             continue
-        for run_dir in date_dir.iterdir():
-            if run_dir.is_dir():
-                runs.append(run_dir)
+        for child in date_dir.iterdir():
+            if not child.is_dir():
+                continue
+            if _is_run_dir(child):
+                runs.append(child)
+            else:
+                # dancer subfolder — one level deeper
+                for run_dir in child.iterdir():
+                    if run_dir.is_dir() and _is_run_dir(run_dir):
+                        runs.append(run_dir)
     return runs
 
 
@@ -125,6 +140,12 @@ def _find_run_dir(output_root: Path, run_id: str) -> Path | None:
         candidate = date_dir / run_id
         if candidate.is_dir():
             return candidate
+        for child in date_dir.iterdir():
+            if not child.is_dir():
+                continue
+            candidate = child / run_id
+            if candidate.is_dir():
+                return candidate
     return None
 
 
