@@ -31,7 +31,6 @@ class SessionStartRequest(BaseModel):
     session_id: str = ""
     dance_id: str
     sequence_name: str = "udp_sequence"
-    gender: str = "female"
     step_type: str = "step"
     run_id: str = ""
     extra: Dict[str, Any] = Field(default_factory=dict)

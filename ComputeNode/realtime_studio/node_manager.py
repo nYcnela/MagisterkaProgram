@@ -224,7 +224,6 @@ class ComputeNodeManager:
             max_windows=self.cfg.max_windows,
             dance_id=self.cfg.dance_id,
             sequence_name=self.cfg.sequence_name,
-            gender=self.cfg.gender,
             step_type=self.cfg.step_type,
             live_z_threshold=self.cfg.live_z_threshold,
             live_major_order_threshold=self.cfg.live_major_order_threshold,
@@ -417,7 +416,6 @@ class ComputeNodeManager:
             "session_id": session_id,
             "dance_id": req.dance_id,
             "sequence_name": req.sequence_name,
-            "gender": req.gender,
             "step_type": req.step_type,
         }
         if req.run_id.strip():

@@ -8,6 +8,10 @@ import sys
 from .settings import StudioConfig
 
 
+def _gender_from_dance_id(dance_id: str) -> str:
+    return "male" if dance_id.startswith("m_") else "female"
+
+
 def _looks_like_backend_root(root: Path) -> bool:
     return (
         (root / "bin/run_udp_e2e_test.py").exists()
@@ -171,8 +175,6 @@ def build_backend_command(cfg: StudioConfig, run_id: str | None = None) -> tuple
             str(cfg.duration_seconds),
             "--max-windows",
             str(cfg.max_windows),
-            "--gender",
-            str(cfg.gender),
             "--step-type",
             str(cfg.step_type),
             "--sequence-name",
@@ -216,7 +218,7 @@ def build_backend_command(cfg: StudioConfig, run_id: str | None = None) -> tuple
             "--sequence-name",
             str(cfg.sequence_name),
             "--gender",
-            str(cfg.gender),
+            _gender_from_dance_id(cfg.dance_id),
             "--step-type",
             str(cfg.step_type),
             "--pattern-file",

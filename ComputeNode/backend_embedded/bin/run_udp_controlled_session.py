@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shlex
 import signal
 import socket
@@ -11,9 +12,25 @@ import subprocess
 import sys
 import threading
 import time
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
+
+
+def _gender_from_dance_id(dance_id: str) -> str:
+    return "male" if dance_id.startswith("m_") else "female"
+
+
+def _dancer_subdir(first: str, last: str) -> str:
+    parts = [first.strip(), last.strip()]
+    name = " ".join(p for p in parts if p)
+    if not name:
+        return ""
+    nfkd = unicodedata.normalize("NFKD", name)
+    ascii_text = nfkd.encode("ascii", "ignore").decode("ascii")
+    safe = re.sub(r'[\\/:*?"<>|]', "_", ascii_text).strip()
+    return safe
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -31,7 +48,6 @@ class RuntimeDefaults:
     live_z_threshold: float
     live_major_order_threshold: int
     live_emit_minor_order_text: bool
-    gender: str
     step_type: str
     sequence_name: str
 
@@ -67,13 +83,13 @@ class SessionRunner:
     def _write_session_meta(
         self,
         *,
+        run_root: Path,
         session_id: str,
         run_id: str,
         dance_id: str,
         pattern_file: Path,
         control_payload: dict[str, Any],
     ) -> None:
-        run_root = self._dated_output_root() / run_id
         run_root.mkdir(parents=True, exist_ok=True)
         payload = {
             "session_id": session_id,
@@ -81,7 +97,7 @@ class SessionRunner:
             "dance_id": dance_id,
             "pattern_file": str(pattern_file),
             "sequence_name": str(control_payload.get("sequence_name") or "").strip(),
-            "gender": str(control_payload.get("gender") or "").strip(),
+            "gender": _gender_from_dance_id(dance_id),
             "step_type": str(control_payload.get("step_type") or "").strip(),
             "dancer_first_name": str(control_payload.get("dancer_first_name") or "").strip(),
             "dancer_last_name": str(control_payload.get("dancer_last_name") or "").strip(),
@@ -121,7 +137,7 @@ class SessionRunner:
         duration_seconds = float(control_payload.get("duration_seconds", defaults.duration_seconds))
         max_windows = int(control_payload.get("max_windows", defaults.max_windows))
 
-        gender = str(control_payload.get("gender", defaults.gender))
+        gender = _gender_from_dance_id(dance_id)
         step_type = str(control_payload.get("step_type", defaults.step_type))
         sequence_name = str(control_payload.get("sequence_name", defaults.sequence_name))
 
@@ -132,6 +148,14 @@ class SessionRunner:
         live_emit_minor_order_text = bool(
             control_payload.get("live_emit_minor_order_text", defaults.live_emit_minor_order_text)
         )
+
+        dancer_dir = _dancer_subdir(
+            str(control_payload.get("dancer_first_name") or ""),
+            str(control_payload.get("dancer_last_name") or ""),
+        )
+        dated_root = self._dated_output_root()
+        session_output_root = dated_root / dancer_dir if dancer_dir else dated_root
+        run_root = session_output_root / run_id
 
         cmd = [
             self.python_exec,
@@ -161,7 +185,7 @@ class SessionRunner:
             str(pattern_file),
             "--model-inputs-only",
             "--output-root",
-            str(self._dated_output_root()),
+            str(session_output_root),
             "--run-id",
             run_id,
             "--live-z-threshold",
@@ -180,6 +204,7 @@ class SessionRunner:
         print("[CONTROL] CMD", shlex.join(cmd))
 
         self._write_session_meta(
+            run_root=run_root,
             session_id=session_id,
             run_id=run_id,
             dance_id=dance_id,
@@ -322,7 +347,6 @@ class ControlServer:
             self.active_meta = {
                 "session_id": session_id,
                 "dance_id": dance_id,
-                "gender": merged.get("gender", self.defaults.gender),
                 "step_type": merged.get("step_type", self.defaults.step_type),
                 "sequence_name": merged.get("sequence_name", self.defaults.sequence_name),
             }
@@ -415,7 +439,6 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--duration-seconds", type=float, default=0.0)
     ap.add_argument("--max-windows", type=int, default=0)
 
-    ap.add_argument("--gender", choices=["female", "male"], default="female")
     ap.add_argument("--step-type", choices=["step", "static"], default="step")
     ap.add_argument("--sequence-name", default="udp_sequence")
 
@@ -444,7 +467,6 @@ def main() -> int:
         live_z_threshold=args.live_z_threshold,
         live_major_order_threshold=args.live_major_order_threshold,
         live_emit_minor_order_text=args.live_emit_minor_order_text,
-        gender=args.gender,
         step_type=args.step_type,
         sequence_name=args.sequence_name,
     )

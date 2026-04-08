@@ -38,7 +38,6 @@ class ComputeNodeConfig:
 
     dance_id: str = "k_krok_podstawowy_polonez"
     sequence_name: str = "udp_sequence"
-    gender: str = "female"
     step_type: str = "step"
 
     live_z_threshold: float = 1.7
