@@ -36,6 +36,11 @@ class SessionStartRequest(BaseModel):
     extra: Dict[str, Any] = Field(default_factory=dict)
 
 
+class SetDancerRequest(BaseModel):
+    dancer_first_name: str = ""
+    dancer_last_name: str = ""
+
+
 class SessionStopRequest(BaseModel):
     reason: str = "remote_gui"
 

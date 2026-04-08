@@ -20,7 +20,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 
 from .analysis import build_run_analysis, list_analysis_runs
 from .compute_settings import ComputeNodeConfig, load_compute_config
-from .control_contracts import NodeSnapshot, ProcessStatus, SessionStartRequest, SessionStopRequest, WsEvent
+from .control_contracts import NodeSnapshot, ProcessStatus, SessionStartRequest, SessionStopRequest, SetDancerRequest, WsEvent
 from .launch import build_backend_command, build_llm_command, extract_feedback_text
 from .settings import StudioConfig
 
@@ -425,6 +425,16 @@ class ComputeNodeManager:
         self._append_log("node", f"Sent session_start for {session_id}")
         return payload
 
+    def set_dancer(self, first_name: str, last_name: str) -> dict:
+        payload = {
+            "type": "set_dancer",
+            "dancer_first_name": first_name.strip(),
+            "dancer_last_name": last_name.strip(),
+        }
+        self._send_control_packet(payload)
+        self._append_log("node", f"Sent set_dancer first={first_name.strip()!r} last={last_name.strip()!r}")
+        return payload
+
     def stop_session(self, req: SessionStopRequest) -> dict:
         payload = {"type": "session_end", "reason": req.reason}
         self._send_control_packet(payload)
@@ -530,6 +540,11 @@ def create_app(cfg: ComputeNodeConfig | None = None) -> FastAPI:
         except RuntimeError as exc:
             raise HTTPException(status_code=409, detail=str(exc))
         return {"sent": payload, "snapshot": manager.snapshot_data().model_dump()}
+
+    @app.post("/dancer/set")
+    def dancer_set(req: SetDancerRequest):
+        payload = manager.set_dancer(req.dancer_first_name, req.dancer_last_name)
+        return {"sent": payload}
 
     @app.post("/session/stop")
     def session_stop(req: SessionStopRequest):

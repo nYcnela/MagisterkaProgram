@@ -293,6 +293,7 @@ class ControlServer:
 
         self.last_payload: dict[str, Any] = {}
         self.active_meta: dict[str, Any] = {}
+        self.dancer_context: dict[str, Any] = {}
 
     def _resolve_pattern_file(self, payload: dict[str, Any]) -> tuple[str, Path]:
         dance_id = str(payload.get("dance_id") or payload.get("dance") or "").strip()
@@ -327,6 +328,17 @@ class ControlServer:
             print("[CONTROL][warn] Missing 'type' in control packet.")
             return
 
+        if msg_type == "set_dancer":
+            first = str(msg.get("dancer_first_name") or "").strip()
+            last = str(msg.get("dancer_last_name") or "").strip()
+            self.dancer_context = {}
+            if first:
+                self.dancer_context["dancer_first_name"] = first
+            if last:
+                self.dancer_context["dancer_last_name"] = last
+            print(f"[CONTROL] SET_DANCER first={first!r} last={last!r}")
+            return
+
         if msg_type in {"session_prepare", "prepare"}:
             self.last_payload = dict(msg)
             session_id = str(msg.get("session_id") or f"s{int(time.time())}")
@@ -337,8 +349,9 @@ class ControlServer:
             return
 
         if msg_type in {"session_start", "start_now", "start"}:
-            merged = dict(self.last_payload)
-            merged.update(msg)
+            merged = dict(self.dancer_context)  # base: persistent dancer context
+            merged.update(self.last_payload)    # override with prepare payload
+            merged.update(msg)                  # override with start payload
 
             session_id = str(merged.get("session_id") or f"s{int(time.time())}")
             dance_id, pattern_file = self._resolve_pattern_file(merged)
