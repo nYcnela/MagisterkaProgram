@@ -14,3 +14,11 @@ accelerate>=1.1,<2
 safetensors>=0.4,<1
 sentencepiece>=0.2,<1
 protobuf>=4.25,<6
+
+# eval
+torch>=2.2,<3
+datasets>=2.20,<4
+evaluate>=0.4,<1
+absl-py>=1.0,<3
+nltk>=3.8,<4
+bert-score>=0.3,<1
