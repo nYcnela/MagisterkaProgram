@@ -16,9 +16,13 @@ sentencepiece>=0.2,<1
 protobuf>=4.25,<6
 
 # eval
-torch>=2.2,<3
+torch==2.5.1+cu121
 datasets>=2.20,<4
 evaluate>=0.4,<1
 absl-py>=1.0,<3
 nltk>=3.8,<4
 bert-score>=0.3,<1
+rouge-score>=0.1,<1
+bitsandbytes>=0.43,<1
+sacrebleu>=2.3,<3
+sacremoses>=0.0.53,<1
