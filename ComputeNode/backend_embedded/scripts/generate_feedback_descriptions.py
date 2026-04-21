@@ -33,6 +33,39 @@ def join_phrases(*phrases, sep=", "):
     return sep.join(parts[:-1]) + " and " + parts[-1]
 
 
+def is_supported_metric_block(name, data, excluded_keys):
+    """Return True when a metrics_summary block should participate in text/debug generation."""
+    if not isinstance(data, dict):
+        return False
+
+    if name in excluded_keys:
+        return False
+
+    if (
+        ("arm_stability" in name or "elbow_stability" in name)
+        and data.get("expected_frac", 1.0) == 0
+    ):
+        return False
+
+    return True
+
+
+def iter_z_mean_metrics(metrics_summary, excluded_keys):
+    """Yield (group_name, fragment_name, signed_z_score) for eligible z_mean_* metrics."""
+    for key, value in metrics_summary.items():
+        if not is_supported_metric_block(key, value, excluded_keys):
+            continue
+
+        for subk, subv in value.items():
+            if isinstance(subv, (int, float)) and subk.startswith("z_mean_"):
+                yield key, subk, float(subv)
+
+
+def format_top_info_entry(group_name, fragment_name, z_score):
+    """Serialize debug info with both the group label and the exact z-score fragment."""
+    return f"{group_name}_{fragment_name}: {z_score:.3f}"
+
+
 def describe_arm_stability(name, data):
     """Handle arm_stability and arm_stability_x/y."""
     if data.get("expected_frac", 1.0) == 0:
@@ -156,7 +189,7 @@ def describe_step(name, data, intro):
     if main_part:
         desc = f"{intro} with the {side} leg were {main_part}"
         if knee_text:
-            desc += f", while {knee_text}"
+            desc += f", {knee_text}"
         return desc + ". "
     elif knee_text:
         intro_lc = intro.lower()
@@ -182,9 +215,9 @@ def describe_accent(name, data):
     )
 
     if dur_text and knee_text:
-        desc = f"Accents with the {side} leg were performed {dur_text}, while {knee_text}"
+        desc = f"Accents with the {side} leg were {dur_text}, while {knee_text}"
     elif dur_text:
-        desc = f"Accents with the {side} leg were performed {dur_text}"
+        desc = f"Accents with the {side} leg were {dur_text}"
     elif knee_text:
         # poprawiam literówę "th with the"
         desc = f"{knee_text} in accents with the {side} leg"
@@ -253,14 +286,14 @@ def describe_bow_lead(name, data):
     if d_text and (k_text or a_text or l_text):
         extras = join_phrases(a_text, l_text, sep=", ")
         if extras:
-            return f"The bow with the {side} side was {main_part}, while {extras}. "
+            return f"The {side} side bow was {main_part}, while {extras}. "
         else:
-            return f"The bow with the {side} side was {main_part}. "
+            return f"The {side} side bow was {main_part}. "
     elif d_text:
-        return f"The bow with the {side} side was {d_text}. "
+        return f"The {side} side bow was {d_text}. "
     elif any([k_text, a_text, l_text]):
         details = join_phrases(k_text, a_text, l_text, sep=", ")
-        return f"The bow with the {side} side had {details}. "
+        return f"In the {side} side bow {details}. "
     else:
         return ""
 
@@ -327,6 +360,65 @@ def describe_turn(data):
     return f"The turn was made {d_text}. "
 
 
+def build_description_part(key, value, has_detailed_bow):
+    """Return a single description sentence for a metrics_summary key."""
+    if not isinstance(value, dict):
+        return ""
+
+    if key.startswith("arm_stability") and key not in ["arm_stability_x", "arm_stability_y"]:
+        return describe_arm_stability(key, value)
+
+    if key.startswith("elbow_stability") and key not in ["elbow_stability"]:
+        return describe_elbow_stability(key, value)
+
+    if key.startswith("step") and key not in [
+        "step_R_accented",
+        "step_L_accented",
+        "step_R_accented_side",
+        "step_L_accented_side",
+    ]:
+        return describe_step(key, value, "Steps")
+
+    if key.endswith("accented") and key not in [
+        "step_R_accented_side",
+        "step_L_accented_side",
+    ]:
+        return describe_step(key, value, "Accented steps")
+
+    if key.startswith("accent"):
+        return describe_accent(key, value)
+
+    if key.endswith("side"):
+        return describe_step(key, value, "Steps to the side")
+
+    if key.startswith("bow") and not has_detailed_bow:
+        return describe_bow(value)
+
+    if key.startswith("bow") and key.endswith("lead"):
+        return describe_bow_lead(key, value)
+
+    if key.startswith("arms_up"):
+        return describe_arms_up(value)
+
+    if key.startswith("head"):
+        return describe_head_nod(value)
+
+    if key.startswith("turn"):
+        return describe_turn(value)
+
+    return ""
+
+
+def build_soft_description_part(key, value, has_detailed_bow, fragment_name, z_score):
+    """Force a mild natural-language description from the dominant fragment when needed."""
+    if not fragment_name or z_score == 0 or not isinstance(value, dict):
+        return ""
+
+    adjusted_value = dict(value)
+    adjusted_value[fragment_name] = 1.001 if z_score > 0 else -1.001
+    return build_description_part(key, adjusted_value, has_detailed_bow)
+
+
 # -------------------------
 # generator tekstu opisowego
 # -------------------------
@@ -334,8 +426,10 @@ def describe_turn(data):
 def generate_description(
     metrics_summary,
     order_score=None,
+    errors_detected=None,
     *,
     z_threshold=1.0,
+    error_z_threshold=1.5,
     major_order_threshold=80,
     minor_order_threshold=100,
     emit_minor_order_text=True,
@@ -348,33 +442,25 @@ def generate_description(
       order_text  -> komentarz o sekwencji,
       top_info    -> lista nazw najgorszych segmentów dla debugu
     """
-    EXCLUDED_KEYS = {"arm_stability_x", "arm_stability_y", "elbow_stability"}
+    EXCLUDED_KEYS = {"bow", "arm_stability_x", "arm_stability_y", "elbow_stability"}
 
     # 1. zbierz max |z| dla każdego segmentu
     z_scores = {}
-    for key, value in metrics_summary.items():
-        if not isinstance(value, dict):
-            continue
-
-        if key in EXCLUDED_KEYS:
-            continue
-
-        # skip stabilności jeśli expected_frac == 0
-        if (
-            ("arm_stability" in key or "elbow_stability" in key)
-            and value.get("expected_frac", 1.0) == 0
-        ):
-            continue
-
-        for subk, subv in value.items():
-            if isinstance(subv, (int, float)) and subk.startswith("z_mean_"):
-                z_scores[key] = max(
-                    z_scores.get(key, 0),
-                    abs(subv)
-                )
+    top_fragments = {}
+    for key, subk, subv in iter_z_mean_metrics(metrics_summary, EXCLUDED_KEYS):
+        if key not in top_fragments or abs(subv) > abs(top_fragments[key][1]):
+            top_fragments[key] = (subk, subv)
+            z_scores[key] = abs(subv)
 
     filtered = {k: v for k, v in z_scores.items() if v > z_threshold}
     top_keys_all = sorted(filtered, key=lambda k: filtered[k], reverse=True)
+    ranked_keys_all = sorted(z_scores, key=lambda k: z_scores[k], reverse=True)
+
+    # sprawdzamy czy mamy osobne bow_L_lead/bow_R_lead itd.
+    has_detailed_bow = any(
+        key.startswith("bow_") and key != "bow"
+        for key in metrics_summary.keys()
+    )
 
     # kolejność ruchów -> wpływa na to, ile feedbacku dajemy
     order_text = ""
@@ -390,65 +476,93 @@ def generate_description(
     else:
         top_keys = top_keys_all[:normal_top_k]
 
+    forced_parts = {}
+
+    if errors_detected and len(errors_detected) == 1:
+        described_keys = set()
+        for key in top_keys:
+            value = metrics_summary.get(key, {})
+            part = build_description_part(key, value, has_detailed_bow)
+            if not part:
+                fragment = top_fragments.get(key)
+                if fragment is not None:
+                    part = build_soft_description_part(
+                        key,
+                        value,
+                        has_detailed_bow,
+                        fragment[0],
+                        fragment[1],
+                    )
+            if part:
+                described_keys.add(key)
+                forced_parts[key] = part
+
+        for key in ranked_keys_all:
+            if key in top_keys or len(described_keys) >= normal_top_k:
+                continue
+
+            value = metrics_summary.get(key, {})
+            part = build_description_part(key, value, has_detailed_bow)
+            if not part:
+                fragment = top_fragments.get(key)
+                if fragment is not None:
+                    part = build_soft_description_part(
+                        key,
+                        value,
+                        has_detailed_bow,
+                        fragment[0],
+                        fragment[1],
+                    )
+            if not part:
+                continue
+
+            top_keys.append(key)
+            described_keys.add(key)
+            forced_parts[key] = part
+
     # jeśli nie ma żadnych mocnych odchyleń
     if not top_keys:
         return "", order_text, []
 
-    # sprawdzamy czy mamy osobne bow_L_lead/bow_R_lead itd.
-    has_detailed_bow = any(
-        key.startswith("bow_") and key != "bow"
-        for key in metrics_summary.keys()
-    )
-
     parts = []
     for key in top_keys:
-        value = metrics_summary.get(key, {})
-        if not isinstance(value, dict):
-            continue
-
-        if key.startswith("arm_stability") and key not in ["arm_stability_x", "arm_stability_y"]:
-            parts.append(describe_arm_stability(key, value))
-
-        elif key.startswith("elbow_stability") and key not in ["elbow_stability"]:
-            parts.append(describe_elbow_stability(key, value))
-
-        elif key.startswith("step") and key not in [
-            "step_R_accented",
-            "step_L_accented",
-            "step_R_accented_side",
-            "step_L_accented_side",
-        ]:
-            parts.append(describe_step(key, value, "Steps"))
-
-        elif key.endswith("accented") and key not in [
-            "step_R_accented_side",
-            "step_L_accented_side",
-        ]:
-            parts.append(describe_step(key, value, "Accented steps"))
-
-        elif key.startswith("accent"):
-            parts.append(describe_accent(key, value))
-
-        elif key.endswith("side"):
-            parts.append(describe_step(key, value, "Steps to the side"))
-
-        elif key.startswith("bow") and not has_detailed_bow:
-            parts.append(describe_bow(value))
-
-        elif key.startswith("bow") and key.endswith("lead"):
-            parts.append(describe_bow_lead(key, value))
-
-        elif key.startswith("arms_up"):
-            parts.append(describe_arms_up(value))
-
-        elif key.startswith("head"):
-            parts.append(describe_head_nod(value))
-
-        elif key.startswith("turn"):
-            parts.append(describe_turn(value))
+        part = forced_parts.get(key)
+        if not part:
+            part = build_description_part(key, metrics_summary.get(key, {}), has_detailed_bow)
+        if part:
+            parts.append(part)
+        if len(parts) >= normal_top_k:
+            break
 
     description_text = "".join(parts).strip()
-    top_info = [f"{k}: {z_scores.get(k, 0):.3f}" for k in top_keys]
+    top_info = []
+    seen_top_info = set()
+
+    for key in top_keys:
+        fragment = top_fragments.get(key)
+        if fragment is None:
+            continue
+
+        entry = format_top_info_entry(key, fragment[0], fragment[1])
+        if entry not in seen_top_info:
+            top_info.append(entry)
+            seen_top_info.add(entry)
+
+    if errors_detected:
+        error_fragment_entries = sorted(
+            (
+                (key, subk, subv)
+                for key, subk, subv in iter_z_mean_metrics(metrics_summary, EXCLUDED_KEYS)
+                if abs(subv) >= error_z_threshold
+            ),
+            key=lambda item: (-abs(item[2]), item[0], item[1]),
+        )
+
+        for key, subk, subv in error_fragment_entries:
+            entry = format_top_info_entry(key, subk, subv)
+            if entry not in seen_top_info:
+                top_info.append(entry)
+                seen_top_info.add(entry)
 
     return description_text, order_text, top_info
 
@@ -466,10 +580,14 @@ def process_file(data):
     instruction = (
         "You are the teacher of the polish Polonaise dance. "
         "Based on observation of movements provide a short, supportive feedback "
-        "with two tips for improvement."
+        "with a tip for improvement."
     )
 
-    description, order_text, top_info = generate_description(metrics, order_score)
+    description, order_text, top_info = generate_description(
+        metrics,
+        order_score,
+        errors_detected=errors,
+    )
     description = description.strip()
 
     if description == "":
