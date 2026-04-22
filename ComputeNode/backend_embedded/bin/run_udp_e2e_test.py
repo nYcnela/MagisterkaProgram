@@ -159,9 +159,11 @@ def _window_record_to_model_input(
 ) -> Dict[str, str]:
     metrics_summary = dict(window_record.get("metrics_summary") or {})
     order_score = window_record.get("order_score")
+    errors_detected = list(window_record.get("errors_detected") or [])
     description, order_text, _top_info = desc_module.generate_description(
         metrics_summary,
         order_score,
+        errors_detected=errors_detected,
         z_threshold=z_threshold,
         major_order_threshold=major_order_threshold,
         emit_minor_order_text=emit_minor_order_text,

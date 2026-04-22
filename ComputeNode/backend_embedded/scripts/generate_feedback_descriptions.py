@@ -478,47 +478,46 @@ def generate_description(
 
     forced_parts = {}
 
-    if errors_detected and len(errors_detected) == 1:
-        described_keys = set()
-        for key in top_keys:
-            value = metrics_summary.get(key, {})
-            part = build_description_part(key, value, has_detailed_bow)
-            if not part:
-                fragment = top_fragments.get(key)
-                if fragment is not None:
-                    part = build_soft_description_part(
-                        key,
-                        value,
-                        has_detailed_bow,
-                        fragment[0],
-                        fragment[1],
-                    )
-            if part:
-                described_keys.add(key)
-                forced_parts[key] = part
-
-        for key in ranked_keys_all:
-            if key in top_keys or len(described_keys) >= normal_top_k:
-                continue
-
-            value = metrics_summary.get(key, {})
-            part = build_description_part(key, value, has_detailed_bow)
-            if not part:
-                fragment = top_fragments.get(key)
-                if fragment is not None:
-                    part = build_soft_description_part(
-                        key,
-                        value,
-                        has_detailed_bow,
-                        fragment[0],
-                        fragment[1],
-                    )
-            if not part:
-                continue
-
-            top_keys.append(key)
+    described_keys = set()
+    for key in top_keys:
+        value = metrics_summary.get(key, {})
+        part = build_description_part(key, value, has_detailed_bow)
+        if not part:
+            fragment = top_fragments.get(key)
+            if fragment is not None:
+                part = build_soft_description_part(
+                    key,
+                    value,
+                    has_detailed_bow,
+                    fragment[0],
+                    fragment[1],
+                )
+        if part:
             described_keys.add(key)
             forced_parts[key] = part
+
+    for key in ranked_keys_all:
+        if key in top_keys or len(described_keys) >= normal_top_k:
+            continue
+
+        value = metrics_summary.get(key, {})
+        part = build_description_part(key, value, has_detailed_bow)
+        if not part:
+            fragment = top_fragments.get(key)
+            if fragment is not None:
+                part = build_soft_description_part(
+                    key,
+                    value,
+                    has_detailed_bow,
+                    fragment[0],
+                    fragment[1],
+                )
+        if not part:
+            continue
+
+        top_keys.append(key)
+        described_keys.add(key)
+        forced_parts[key] = part
 
     # jeśli nie ma żadnych mocnych odchyleń
     if not top_keys:
