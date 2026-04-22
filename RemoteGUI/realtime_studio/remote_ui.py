@@ -736,6 +736,9 @@ class RemoteMainWindow(QMainWindow):
         clear_btn.clicked.connect(lambda: self.feedback_view.clear())
         header_row.addWidget(clear_btn)
         layout.addLayout(header_row)
+        from PySide6.QtWidgets import QCheckBox
+        self.show_input_check = QCheckBox("Pokaż input modelu")
+        layout.addWidget(self.show_input_check)
         self.feedback_view = QTextEdit()
         self.feedback_view.setReadOnly(True)
         self.feedback_view.setMinimumHeight(50)
@@ -1025,10 +1028,15 @@ class RemoteMainWindow(QMainWindow):
                 ts = time.strftime("%H:%M:%S")
                 existing = self.feedback_view.toPlainText().strip()
                 header = f"── {ts} ──"
+                display = new_text
+                if self.show_input_check.isChecked():
+                    model_input = str(payload.get("model_input", "")).strip()
+                    if model_input:
+                        display = f"[Input] {model_input}\n{new_text}"
                 if existing:
-                    self.feedback_view.setPlainText(f"{header}\n{new_text}\n\n{existing}")
+                    self.feedback_view.setPlainText(f"{header}\n{display}\n\n{existing}")
                 else:
-                    self.feedback_view.setPlainText(f"{header}\n{new_text}")
+                    self.feedback_view.setPlainText(f"{header}\n{display}")
                 sb = self.feedback_view.verticalScrollBar()
                 sb.setValue(sb.minimum())
         elif kind == "backend_state":
