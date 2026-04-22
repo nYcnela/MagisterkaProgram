@@ -35,7 +35,8 @@ from pipeline_core.realtime.window_csv import write_window_as_vicon_csv
 
 MODEL_INSTRUCTION = (
     "You are the teacher of the Polish Polonaise dance. "
-    "Based on the student's movement description, give one short sentence of supportive corrective feedback, "
+    "Based on the student's movement description, give one very short corrective message "
+    "using only the raw correction words and no extra filler, "
     "then give a score from 1 to 5, where 5 is best."
 )
 

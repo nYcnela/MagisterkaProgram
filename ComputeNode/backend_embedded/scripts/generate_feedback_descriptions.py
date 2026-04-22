@@ -478,46 +478,47 @@ def generate_description(
 
     forced_parts = {}
 
-    described_keys = set()
-    for key in top_keys:
-        value = metrics_summary.get(key, {})
-        part = build_description_part(key, value, has_detailed_bow)
-        if not part:
-            fragment = top_fragments.get(key)
-            if fragment is not None:
-                part = build_soft_description_part(
-                    key,
-                    value,
-                    has_detailed_bow,
-                    fragment[0],
-                    fragment[1],
-                )
-        if part:
+    if errors_detected and len(errors_detected) == 1:
+        described_keys = set()
+        for key in top_keys:
+            value = metrics_summary.get(key, {})
+            part = build_description_part(key, value, has_detailed_bow)
+            if not part:
+                fragment = top_fragments.get(key)
+                if fragment is not None:
+                    part = build_soft_description_part(
+                        key,
+                        value,
+                        has_detailed_bow,
+                        fragment[0],
+                        fragment[1],
+                    )
+            if part:
+                described_keys.add(key)
+                forced_parts[key] = part
+
+        for key in ranked_keys_all:
+            if key in top_keys or len(described_keys) >= normal_top_k:
+                continue
+
+            value = metrics_summary.get(key, {})
+            part = build_description_part(key, value, has_detailed_bow)
+            if not part:
+                fragment = top_fragments.get(key)
+                if fragment is not None:
+                    part = build_soft_description_part(
+                        key,
+                        value,
+                        has_detailed_bow,
+                        fragment[0],
+                        fragment[1],
+                    )
+            if not part:
+                continue
+
+            top_keys.append(key)
             described_keys.add(key)
             forced_parts[key] = part
-
-    for key in ranked_keys_all:
-        if key in top_keys or len(described_keys) >= normal_top_k:
-            continue
-
-        value = metrics_summary.get(key, {})
-        part = build_description_part(key, value, has_detailed_bow)
-        if not part:
-            fragment = top_fragments.get(key)
-            if fragment is not None:
-                part = build_soft_description_part(
-                    key,
-                    value,
-                    has_detailed_bow,
-                    fragment[0],
-                    fragment[1],
-                )
-        if not part:
-            continue
-
-        top_keys.append(key)
-        described_keys.add(key)
-        forced_parts[key] = part
 
     # jeśli nie ma żadnych mocnych odchyleń
     if not top_keys:
@@ -577,9 +578,10 @@ def process_file(data):
     composite_score = data.get("composite_score", None)
 
     instruction = (
-        "You are the teacher of the polish Polonaise dance. "
-        "Based on observation of movements provide a short, supportive feedback "
-        "with a tip for improvement."
+        "You are the teacher of the Polish Polonaise dance. "
+        "Based on the student's movement description, give one very short corrective message "
+        "using only the raw correction words and no extra filler, "
+        "then give a score from 1 to 5, where 5 is best."
     )
 
     description, order_text, top_info = generate_description(
