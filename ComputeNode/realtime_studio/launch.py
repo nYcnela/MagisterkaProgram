@@ -140,7 +140,14 @@ def extract_feedback_text(line: str) -> str | None:
     marker = "[FEEDBACK]"
     if marker not in line:
         return None
-    return line.split(marker, 1)[1].strip()
+    after = line.split(marker, 1)[1]
+    return after.split("[INPUT]", 1)[0].strip()
+
+
+def extract_model_input_text(line: str) -> str | None:
+    if "[INPUT]" not in line:
+        return None
+    return line.split("[INPUT]", 1)[1].strip()
 
 
 def build_backend_command(cfg: StudioConfig, run_id: str | None = None) -> tuple[str, list[str], str, Path]:

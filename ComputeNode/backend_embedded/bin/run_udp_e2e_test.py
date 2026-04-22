@@ -746,6 +746,7 @@ def main() -> int:
                             print(
                                 f"[FEEDBACK] {fb.get('feedback', '')} "
                                 f"(score={fb.get('score')}, {fb.get('latency_s')}s)"
+                                f" [INPUT] {rec.get('input', '')}"
                             )
 
                     t1 = time.monotonic()

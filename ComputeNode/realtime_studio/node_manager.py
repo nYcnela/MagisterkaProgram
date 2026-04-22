@@ -21,7 +21,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from .analysis import build_run_analysis, list_analysis_runs
 from .compute_settings import ComputeNodeConfig, load_compute_config
 from .control_contracts import NodeSnapshot, ProcessStatus, SessionStartRequest, SessionStopRequest, SetDancerRequest, WsEvent
-from .launch import build_backend_command, build_llm_command, extract_feedback_text
+from .launch import build_backend_command, build_llm_command, extract_feedback_text, extract_model_input_text
 from .settings import StudioConfig
 
 
@@ -117,7 +117,8 @@ class ComputeNodeManager:
         if feedback:
             with self._lock:
                 self.snapshot.last_feedback = feedback
-            self._publish("feedback", {"text": feedback})
+            model_input = extract_model_input_text(line) or ""
+            self._publish("feedback", {"text": feedback, "model_input": model_input})
             self._send_vr_feedback(feedback)
             score = self._extract_feedback_score(line)
             if score is not None:
