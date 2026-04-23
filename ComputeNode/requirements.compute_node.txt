@@ -10,7 +10,7 @@ websockets>=13,<16
 pydantic>=2.8,<3
 transformers==4.41.2
 tokenizers==0.19.1
-peft>=0.14,<1
+peft==0.10.0
 accelerate>=1.1,<2
 safetensors>=0.4,<1
 sentencepiece>=0.2,<1

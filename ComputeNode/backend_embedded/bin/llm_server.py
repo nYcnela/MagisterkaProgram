@@ -189,7 +189,7 @@ def load_model(adapter_dir: Path, model_id: str, use_4bit: bool = True) -> None:
                 _model_id,
                 device_map="auto",
                 quantization_config=bnb_config,
-                dtype=dtype,
+                torch_dtype=dtype,
             )
         except Exception as e:
             print(f"[LLM][warn] 4-bit failed ({e}), falling back to full precision.")
@@ -198,7 +198,7 @@ def load_model(adapter_dir: Path, model_id: str, use_4bit: bool = True) -> None:
     if not can_4bit:
         base = AutoModelForCausalLM.from_pretrained(
             _model_id,
-            dtype=dtype,
+            torch_dtype=dtype,
             device_map=None,
         ).to(_device)
 
