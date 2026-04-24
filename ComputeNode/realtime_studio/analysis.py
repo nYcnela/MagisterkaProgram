@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import math
 import sys
 from datetime import datetime
 from functools import lru_cache
@@ -64,6 +65,16 @@ def _safe_score(value: Any) -> Any:
         return None
     if isinstance(value, float) and (value != value or value == float("inf") or value == float("-inf")):
         return None
+    return value
+
+
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
     return value
 
 
@@ -572,7 +583,7 @@ def build_run_analysis(cfg: ComputeNodeConfig, run_id: str) -> dict[str, Any]:
             "created_at": _run_timestamp(run_dir, session_meta),
         }
 
-    return {
+    payload = {
         "run": {
             **run_item,
             "session_id": str(session_meta.get("session_id") or "").strip(),
@@ -612,3 +623,4 @@ def build_run_analysis(cfg: ComputeNodeConfig, run_id: str) -> dict[str, Any]:
             "window_scores": window_scores,
         },
     }
+    return _json_safe(payload)
