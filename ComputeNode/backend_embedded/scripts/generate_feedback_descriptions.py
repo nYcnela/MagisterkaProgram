@@ -12,13 +12,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 # Pomocnicze funkcje
 # -------------------------
 
-def qualitative_phrase(z, neg_un=None, neg_ov=None):
+def qualitative_phrase(z, neg_un=None, neg_ov=None, *, threshold=1.0):
     """Return a natural phrase describing a z-score deviation."""
     if z is None:
         return ""
-    if z >= 1.0:
+    if z >= threshold:
         return neg_ov
-    elif z <= -1.0:
+    elif z <= -threshold:
         return neg_un
     else:
         return ""
@@ -66,7 +66,7 @@ def format_top_info_entry(group_name, fragment_name, z_score):
     return f"{group_name}_{fragment_name}: {z_score:.3f}"
 
 
-def describe_arm_stability(name, data):
+def describe_arm_stability(name, data, *, threshold=1.0):
     """Handle arm_stability and arm_stability_x/y."""
     if data.get("expected_frac", 1.0) == 0:
         return ""
@@ -110,13 +110,15 @@ def describe_arm_stability(name, data):
     desc_t = qualitative_phrase(
         t,
         neg_un=f"moved {orientation} too early",
-        neg_ov=f"moved {orientation} too late"
+        neg_ov=f"moved {orientation} too late",
+        threshold=threshold,
     )
 
     desc_a = qualitative_phrase(
         a,
         neg_un=angle_low,
-        neg_ov=angle_high
+        neg_ov=angle_high,
+        threshold=threshold,
     )
 
     if desc_t and desc_a:
@@ -131,7 +133,7 @@ def describe_arm_stability(name, data):
     return desc + ". "
 
 
-def describe_elbow_stability(name, data):
+def describe_elbow_stability(name, data, *, threshold=1.0):
     if data.get("expected_frac", 1.0) == 0:
         return ""
 
@@ -141,12 +143,14 @@ def describe_elbow_stability(name, data):
     desc_t = qualitative_phrase(
         t,
         neg_un="moved too quickly",
-        neg_ov="moved too slowly"
+        neg_ov="moved too slowly",
+        threshold=threshold,
     )
     desc_a = qualitative_phrase(
         a,
         neg_un="was kept too straight",
-        neg_ov="was bent a bit too much"
+        neg_ov="was bent a bit too much",
+        threshold=threshold,
     )
 
     if desc_t and desc_a:
@@ -162,7 +166,7 @@ def describe_elbow_stability(name, data):
     return desc + ". "
 
 
-def describe_step(name, data, intro):
+def describe_step(name, data, intro, *, threshold=1.0):
     side = "left" if "_L" in name else "right" if "_R" in name else "both"
     dur = data.get("z_mean_duration")
     length = data.get("z_mean_step_length")
@@ -172,17 +176,20 @@ def describe_step(name, data, intro):
         dur,
         neg_un="performed slightly too fast",
         neg_ov="performed slightly too slow",
+        threshold=threshold,
     )
     length_text = qualitative_phrase(
         length,
         neg_un="slightly too short",
         neg_ov="a bit too long",
+        threshold=threshold,
     )
 
     knee_text = qualitative_phrase(
         knee,
         neg_un="the knee was too stiff",
         neg_ov="the knee was bent too much",
+        threshold=threshold,
     )
 
     main_part = join_phrases(dur_text, length_text, sep=" and ")
@@ -198,7 +205,7 @@ def describe_step(name, data, intro):
         return ""
 
 
-def describe_accent(name, data):
+def describe_accent(name, data, *, threshold=1.0):
     side = "left" if "_L" in name else "right" if "_R" in name else "both"
     dur = data.get("z_mean_duration")
     knee = data.get("z_mean_knee_angle")
@@ -207,11 +214,13 @@ def describe_accent(name, data):
         dur,
         neg_un="slightly too fast",
         neg_ov="slightly too slow",
+        threshold=threshold,
     )
     knee_text = qualitative_phrase(
         knee,
         neg_un="the knee was too stiff",
         neg_ov="the knee was bent too much",
+        threshold=threshold,
     )
 
     if dur_text and knee_text:
@@ -227,19 +236,21 @@ def describe_accent(name, data):
     return desc + ". "
 
 
-def describe_bow(data):
+def describe_bow(data, *, threshold=1.0):
     dur = data.get("z_mean_duration")
     knee = data.get("z_mean_knee_angle")
 
     d_text = qualitative_phrase(
         dur,
         neg_un="a bit rushed",
-        neg_ov="slightly too slow"
+        neg_ov="slightly too slow",
+        threshold=threshold,
     )
     k_text = qualitative_phrase(
         knee,
         neg_un="the knees bent too shallow",
-        neg_ov="the knees bent too deeply"
+        neg_ov="the knees bent too deeply",
+        threshold=threshold,
     )
 
     if d_text and k_text:
@@ -254,7 +265,7 @@ def describe_bow(data):
     return desc + ". "
 
 
-def describe_bow_lead(name, data):
+def describe_bow_lead(name, data, *, threshold=1.0):
     side = "left" if "_L" in name else "right" if "_R" in name else "both"
     dur = data.get("z_mean_duration")
     knee = data.get("z_mean_knee_angle")
@@ -264,22 +275,26 @@ def describe_bow_lead(name, data):
     d_text = qualitative_phrase(
         dur,
         neg_un="a bit rushed",
-        neg_ov="slightly too slow"
+        neg_ov="slightly too slow",
+        threshold=threshold,
     )
     k_text = qualitative_phrase(
         knee,
         neg_un="the knee bent too shallow",
-        neg_ov="the knee bent too deeply"
+        neg_ov="the knee bent too deeply",
+        threshold=threshold,
     )
     a_text = qualitative_phrase(
         arm,
         neg_un="the arm was held too low",
-        neg_ov="the arm lifted too high"
+        neg_ov="the arm lifted too high",
+        threshold=threshold,
     )
     l_text = qualitative_phrase(
         length,
         neg_un="the step was slightly too short",
-        neg_ov="the step was a bit too long"
+        neg_ov="the step was a bit too long",
+        threshold=threshold,
     )
 
     main_part = join_phrases(d_text, k_text, sep=" and ")
@@ -298,19 +313,21 @@ def describe_bow_lead(name, data):
         return ""
 
 
-def describe_arms_up(data):
+def describe_arms_up(data, *, threshold=1.0):
     dur = data.get("z_mean_duration")
     arm = data.get("z_mean_arm_angle")
 
     d_text = qualitative_phrase(
         dur,
         neg_un="too quickly",
-        neg_ov="too slowly"
+        neg_ov="too slowly",
+        threshold=threshold,
     )
     a_text = qualitative_phrase(
         arm,
         neg_un="were not raised high enough",
-        neg_ov="were lifted a bit too high"
+        neg_ov="were lifted a bit too high",
+        threshold=threshold,
     )
 
     if d_text and a_text:
@@ -323,19 +340,21 @@ def describe_arms_up(data):
         return ""
 
 
-def describe_head_nod(data):
+def describe_head_nod(data, *, threshold=1.0):
     dur = data.get("z_mean_duration")
     head = data.get("z_mean_head_angle")
 
     d_text = qualitative_phrase(
         dur,
         neg_un="a bit rushed",
-        neg_ov="slightly too slow"
+        neg_ov="slightly too slow",
+        threshold=threshold,
     )
     h_text = qualitative_phrase(
         head,
         neg_un="the head was tilted too little",
-        neg_ov="the head was tilted too deeply"
+        neg_ov="the head was tilted too deeply",
+        threshold=threshold,
     )
 
     if d_text and h_text:
@@ -348,28 +367,29 @@ def describe_head_nod(data):
         return ""
 
 
-def describe_turn(data):
+def describe_turn(data, *, threshold=1.0):
     dur = data.get("z_mean_duration")
     d_text = qualitative_phrase(
         dur,
         neg_un="too quickly",
-        neg_ov="too slowly"
+        neg_ov="too slowly",
+        threshold=threshold,
     )
     if not d_text:
         return ""
     return f"The turn was made {d_text}. "
 
 
-def build_description_part(key, value, has_detailed_bow):
+def build_description_part(key, value, has_detailed_bow, *, threshold=1.0):
     """Return a single description sentence for a metrics_summary key."""
     if not isinstance(value, dict):
         return ""
 
     if key.startswith("arm_stability") and key not in ["arm_stability_x", "arm_stability_y"]:
-        return describe_arm_stability(key, value)
+        return describe_arm_stability(key, value, threshold=threshold)
 
     if key.startswith("elbow_stability") and key not in ["elbow_stability"]:
-        return describe_elbow_stability(key, value)
+        return describe_elbow_stability(key, value, threshold=threshold)
 
     if key.startswith("step") and key not in [
         "step_R_accented",
@@ -377,46 +397,46 @@ def build_description_part(key, value, has_detailed_bow):
         "step_R_accented_side",
         "step_L_accented_side",
     ]:
-        return describe_step(key, value, "Steps")
+        return describe_step(key, value, "Steps", threshold=threshold)
 
     if key.endswith("accented") and key not in [
         "step_R_accented_side",
         "step_L_accented_side",
     ]:
-        return describe_step(key, value, "Accented steps")
+        return describe_step(key, value, "Accented steps", threshold=threshold)
 
     if key.startswith("accent"):
-        return describe_accent(key, value)
+        return describe_accent(key, value, threshold=threshold)
 
     if key.endswith("side"):
-        return describe_step(key, value, "Steps to the side")
+        return describe_step(key, value, "Steps to the side", threshold=threshold)
 
     if key.startswith("bow") and not has_detailed_bow:
-        return describe_bow(value)
+        return describe_bow(value, threshold=threshold)
 
     if key.startswith("bow") and key.endswith("lead"):
-        return describe_bow_lead(key, value)
+        return describe_bow_lead(key, value, threshold=threshold)
 
     if key.startswith("arms_up"):
-        return describe_arms_up(value)
+        return describe_arms_up(value, threshold=threshold)
 
     if key.startswith("head"):
-        return describe_head_nod(value)
+        return describe_head_nod(value, threshold=threshold)
 
     if key.startswith("turn"):
-        return describe_turn(value)
+        return describe_turn(value, threshold=threshold)
 
     return ""
 
 
-def build_soft_description_part(key, value, has_detailed_bow, fragment_name, z_score):
+def build_soft_description_part(key, value, has_detailed_bow, fragment_name, z_score, *, threshold=1.0):
     """Force a mild natural-language description from the dominant fragment when needed."""
     if not fragment_name or z_score == 0 or not isinstance(value, dict):
         return ""
 
     adjusted_value = dict(value)
-    adjusted_value[fragment_name] = 1.001 if z_score > 0 else -1.001
-    return build_description_part(key, adjusted_value, has_detailed_bow)
+    adjusted_value[fragment_name] = (threshold + 0.001) if z_score > 0 else -(threshold + 0.001)
+    return build_description_part(key, adjusted_value, has_detailed_bow, threshold=threshold)
 
 
 # -------------------------
@@ -452,7 +472,7 @@ def generate_description(
             top_fragments[key] = (subk, subv)
             z_scores[key] = abs(subv)
 
-    filtered = {k: v for k, v in z_scores.items() if v > z_threshold}
+    filtered = {k: v for k, v in z_scores.items() if v >= z_threshold}
     top_keys_all = sorted(filtered, key=lambda k: filtered[k], reverse=True)
     ranked_keys_all = sorted(z_scores, key=lambda k: z_scores[k], reverse=True)
 
@@ -482,7 +502,7 @@ def generate_description(
         described_keys = set()
         for key in top_keys:
             value = metrics_summary.get(key, {})
-            part = build_description_part(key, value, has_detailed_bow)
+            part = build_description_part(key, value, has_detailed_bow, threshold=z_threshold)
             if not part:
                 fragment = top_fragments.get(key)
                 if fragment is not None:
@@ -492,17 +512,18 @@ def generate_description(
                         has_detailed_bow,
                         fragment[0],
                         fragment[1],
+                        threshold=z_threshold,
                     )
             if part:
                 described_keys.add(key)
                 forced_parts[key] = part
 
-        for key in ranked_keys_all:
+        for key in top_keys_all:
             if key in top_keys or len(described_keys) >= normal_top_k:
                 continue
 
             value = metrics_summary.get(key, {})
-            part = build_description_part(key, value, has_detailed_bow)
+            part = build_description_part(key, value, has_detailed_bow, threshold=z_threshold)
             if not part:
                 fragment = top_fragments.get(key)
                 if fragment is not None:
@@ -512,6 +533,7 @@ def generate_description(
                         has_detailed_bow,
                         fragment[0],
                         fragment[1],
+                        threshold=z_threshold,
                     )
             if not part:
                 continue
@@ -528,7 +550,7 @@ def generate_description(
     for key in top_keys:
         part = forced_parts.get(key)
         if not part:
-            part = build_description_part(key, metrics_summary.get(key, {}), has_detailed_bow)
+            part = build_description_part(key, metrics_summary.get(key, {}), has_detailed_bow, threshold=z_threshold)
         if part:
             parts.append(part)
         if len(parts) >= normal_top_k:

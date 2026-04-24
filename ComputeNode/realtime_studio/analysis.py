@@ -259,6 +259,25 @@ def _run_timestamp(run_dir: Path, session_meta: dict[str, Any]) -> str:
     return datetime.fromtimestamp(run_dir.stat().st_mtime).isoformat(timespec="seconds")
 
 
+def _live_feedback_settings(session_meta: dict[str, Any], cfg: ComputeNodeConfig) -> dict[str, Any]:
+    control_payload = session_meta.get("control_payload")
+    control_payload = control_payload if isinstance(control_payload, dict) else {}
+    try:
+        live_z_threshold = float(control_payload.get("live_z_threshold", cfg.live_z_threshold))
+    except Exception:
+        live_z_threshold = float(cfg.live_z_threshold)
+    try:
+        live_major_order_threshold = int(
+            control_payload.get("live_major_order_threshold", cfg.live_major_order_threshold)
+        )
+    except Exception:
+        live_major_order_threshold = int(cfg.live_major_order_threshold)
+    return {
+        "live_z_threshold": round(live_z_threshold, 4),
+        "live_major_order_threshold": live_major_order_threshold,
+    }
+
+
 def list_analysis_runs(cfg: ComputeNodeConfig) -> list[dict[str, Any]]:
     _backend_root, output_root, pattern_root = _analysis_roots(cfg)
 
@@ -510,6 +529,7 @@ def build_run_analysis(cfg: ComputeNodeConfig, run_id: str) -> dict[str, Any]:
 
     prompt_module = _load_prompt_module(str(backend_root / "src"))
     pattern = prompt_module.load_enriched_pattern(pattern_file)
+    live_feedback_settings = _live_feedback_settings(session_meta, cfg)
 
     stage7_files = _resolve_stage7_files(run_dir, sequence_name)
     if not stage7_files:
@@ -518,6 +538,7 @@ def build_run_analysis(cfg: ComputeNodeConfig, run_id: str) -> dict[str, Any]:
     manifest_by_stem = _load_manifest_by_stem(run_dir / "capture" / "windows_manifest.jsonl")
     feedback_map = _feedback_by_window(run_dir)
     analysis_meta = _analysis_window_meta(manifest_by_stem, stage7_files)
+    analysis_meta.update(live_feedback_settings)
 
     event_series: dict[str, list[dict[str, Any]]] = {key: [] for key in EVENT_METRIC_LABELS}
     stage7_items: list[dict[str, Any]] = []
@@ -596,6 +617,10 @@ def build_run_analysis(cfg: ComputeNodeConfig, run_id: str) -> dict[str, Any]:
             "analysis_is_partial": bool(analysis_meta.get("is_partial", False)),
             "processed_until_s": float(analysis_meta.get("processed_until_s", 0.0)),
             "capture_until_s": float(analysis_meta.get("capture_until_s", 0.0)),
+            "live_z_threshold": float(live_feedback_settings.get("live_z_threshold", cfg.live_z_threshold)),
+            "live_major_order_threshold": int(
+                live_feedback_settings.get("live_major_order_threshold", cfg.live_major_order_threshold)
+            ),
         },
         "charts": {
             "meta": analysis_meta,

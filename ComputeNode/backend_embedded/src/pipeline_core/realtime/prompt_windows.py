@@ -202,6 +202,7 @@ def build_window_record(
     window_id: int,
     window_start: float,
     window_end: float,
+    error_threshold: float = 1.0,
 ) -> Dict[str, Any]:
     events = [e for e in (stage7_json.get("events") or []) if isinstance(e, dict)]
     events = sorted(events, key=lambda ev: float(ev.get("time", 0.0)))
@@ -359,11 +360,12 @@ def build_window_record(
     composite_score = int(round(max(60.0, 100.0 - min(40.0, z_avg * 12.0))))
 
     errors_detected: List[str] = []
+    issue_threshold = abs(float(error_threshold))
     for key, block in metrics_summary.items():
         for b_key, b_val in block.items():
             if not b_key.startswith("z_"):
                 continue
-            if abs(float(b_val)) >= 1.0:
+            if abs(float(b_val)) >= issue_threshold:
                 direction = "high" if float(b_val) > 0 else "low"
                 errors_detected.append(f"{key}:{b_key}:{direction}")
 
@@ -410,4 +412,3 @@ def build_window_records_from_stage7(
         out_path.write_text(json.dumps(rec, ensure_ascii=False, indent=2), encoding="utf-8")
         count += 1
     return count
-

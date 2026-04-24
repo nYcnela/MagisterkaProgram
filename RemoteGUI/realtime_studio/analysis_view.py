@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import math
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,7 @@ THEMES = {
         "grid": "#29425e",
         "pattern_fill": "#7dd3fc",
         "pattern_line": "#7dd3fc",
+        "threshold_fill": "#facc15",
         "measured_line": "#0ea5e9",
         "feedback_line": "#f59e0b",
         "partial_fill": "#94a3b8",
@@ -44,6 +46,7 @@ THEMES = {
         "grid": "#cbd5e1",
         "pattern_fill": "#93c5fd",
         "pattern_line": "#2563eb",
+        "threshold_fill": "#facc15",
         "measured_line": "#0f766e",
         "feedback_line": "#d97706",
         "partial_fill": "#cbd5e1",
@@ -242,8 +245,9 @@ class AnalysisFigureWidget(QWidget):
                         "kind": "metric",
                         "title": self._METRIC_CARD_TITLES.get(key, metric.get("title", "Metryka")),
                         "chart_title": self._METRIC_CHART_TITLES.get(key, key),
-                        "note": "Punkty sa ulozone w kolejnosci zdarzen wykrytych w runie.",
+                        "note": self._metric_note(chart_meta),
                         "data": metric,
+                        "meta": chart_meta,
                     }
                 )
         if shoulders:
@@ -308,11 +312,21 @@ class AnalysisFigureWidget(QWidget):
     def _palette(self) -> dict[str, str]:
         return THEMES.get(self._theme, THEMES["dark"])
 
+    @staticmethod
+    def _safe_plot_float(value: Any, *, default: float = math.nan) -> float:
+        if value is None:
+            return default
+        try:
+            number = float(value)
+        except Exception:
+            return default
+        return number if math.isfinite(number) else default
+
     def _render_spec(self, ax, spec: dict[str, Any], *, include_title: bool) -> None:
         kind = str(spec.get("kind") or "")
         chart_title = spec.get("chart_title", spec["title"]) if include_title else ""
         if kind == "metric":
-            self._plot_metric(ax, spec["data"], chart_title)
+            self._plot_metric(ax, spec["data"], chart_title, spec.get("meta", {}))
         elif kind == "stability_shoulders":
             self._plot_stability(ax, spec["data"], chart_title)
         elif kind == "stability_elbows":
@@ -328,16 +342,37 @@ class AnalysisFigureWidget(QWidget):
         ax.tick_params(colors=palette["text"], labelsize=9)
         ax.grid(color=palette["grid"], alpha=0.28, linestyle="--", linewidth=0.6)
 
-    def _plot_metric(self, ax, metric: dict[str, Any], title: str) -> None:
+    def _metric_note(self, meta: dict[str, Any]) -> str:
+        threshold = self._safe_plot_float(meta.get("live_z_threshold"), default=1.0)
+        note = "Punkty sa ulozone w kolejnosci zdarzen wykrytych w runie."
+        if threshold > 1.0:
+            threshold_label = f"{threshold:.2f}".rstrip("0").rstrip(".")
+            note += f" Niebieski pas pokazuje avg ± std, zolty pas pokazuje zakres live dla progu z = {threshold_label}."
+        return note
+
+    def _plot_metric(self, ax, metric: dict[str, Any], title: str, meta: dict[str, Any]) -> None:
         palette = self._palette()
         points = list(metric.get("points", []))
         x = [point.get("index", idx + 1) for idx, point in enumerate(points)]
-        measured = [float(point.get("measured", 0.0)) for point in points]
-        expected = [float(point.get("expected_avg", 0.0)) for point in points]
-        stdev = [float(point.get("expected_stdev", 0.0)) for point in points]
+        measured = [self._safe_plot_float(point.get("measured")) for point in points]
+        expected = [self._safe_plot_float(point.get("expected_avg")) for point in points]
+        stdev = [self._safe_plot_float(point.get("expected_stdev"), default=0.0) for point in points]
+        live_z_threshold = self._safe_plot_float(meta.get("live_z_threshold"), default=1.0)
         lower = [exp - sd for exp, sd in zip(expected, stdev)]
         upper = [exp + sd for exp, sd in zip(expected, stdev)]
 
+        if live_z_threshold > 1.0:
+            threshold_lower = [exp - (sd * live_z_threshold) for exp, sd in zip(expected, stdev)]
+            threshold_upper = [exp + (sd * live_z_threshold) for exp, sd in zip(expected, stdev)]
+            threshold_label = f"{live_z_threshold:.2f}".rstrip("0").rstrip(".")
+            ax.fill_between(
+                x,
+                threshold_lower,
+                threshold_upper,
+                color=palette["threshold_fill"],
+                alpha=0.22,
+                label=f"Live threshold range (avg ± {threshold_label}σ)",
+            )
         ax.fill_between(x, lower, upper, color=palette["pattern_fill"], alpha=0.16, label="Reference range (avg ± std)")
         ax.plot(x, expected, color=palette["pattern_line"], linewidth=2.0, linestyle="--", marker="o", markersize=3, label="Reference avg")
         ax.plot(x, measured, color=palette["measured_line"], linewidth=2.4, marker="o", markersize=4, label="Measured")
@@ -363,8 +398,8 @@ class AnalysisFigureWidget(QWidget):
         palette = self._palette()
         labels = [self._LABEL_PL_TO_EN.get(str(point.get("label") or ""), str(point.get("label") or "")) for point in points]
         x = list(range(len(points)))
-        expected = [float(point.get("expected_angle_avg", 0.0)) for point in points]
-        measured = [float(point.get("measured_angle_avg", 0.0)) for point in points]
+        expected = [self._safe_plot_float(point.get("expected_angle_avg")) for point in points]
+        measured = [self._safe_plot_float(point.get("measured_angle_avg")) for point in points]
         width = 0.36
 
         left_x = [value - width / 2 for value in x]
@@ -382,8 +417,8 @@ class AnalysisFigureWidget(QWidget):
     def _plot_window_scores(self, ax, points: list[dict[str, Any]], title: str, meta: dict[str, Any]) -> None:
         palette = self._palette()
         x = [int(point.get("window_index", idx)) + 1 for idx, point in enumerate(points)]
-        order_score = [float(point.get("order_score", 0.0)) for point in points]
-        composite_score = [float(point.get("composite_score", 0.0)) for point in points]
+        order_score = [self._safe_plot_float(point.get("order_score"), default=0.0) for point in points]
+        composite_score = [self._safe_plot_float(point.get("composite_score"), default=0.0) for point in points]
         feedback_score = [point.get("feedback_score") for point in points]
         total_windows = max(int(meta.get("capture_window_count", 0)), max(x, default=0))
         if total_windows <= 0:
@@ -410,7 +445,7 @@ class AnalysisFigureWidget(QWidget):
                 )
 
         feedback_points = [
-            (xx, float(score))
+            (xx, self._safe_plot_float(score))
             for xx, score in zip(x, feedback_score)
             if isinstance(score, (int, float))
         ]

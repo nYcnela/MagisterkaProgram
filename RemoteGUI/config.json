@@ -10,5 +10,5 @@
   "live_z_threshold": 1.7,
   "live_major_order_threshold": 60,
   "analysis_chart_theme": "dark",
-  "auto_start_llm": true
+  "auto_start_llm": false
 }

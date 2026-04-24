@@ -206,6 +206,7 @@ def _model_input_from_stage7_file(
         window_id=window_id,
         window_start=window_start,
         window_end=window_end,
+        error_threshold=z_threshold,
     )
     return _window_record_to_model_input(
         window_record,
@@ -238,6 +239,7 @@ def _window_bundle_from_stage7_file(
         window_id=window_id,
         window_start=window_start,
         window_end=window_end,
+        error_threshold=z_threshold,
     )
     model_input = _window_record_to_model_input(
         window_record,
