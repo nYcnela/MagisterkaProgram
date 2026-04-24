@@ -32,6 +32,8 @@ THEMES = {
         "pattern_line": "#7dd3fc",
         "measured_line": "#0ea5e9",
         "feedback_line": "#f59e0b",
+        "partial_fill": "#94a3b8",
+        "partial_line": "#f97316",
     },
     "light": {
         "figure_face": "#ffffff",
@@ -44,6 +46,8 @@ THEMES = {
         "pattern_line": "#2563eb",
         "measured_line": "#0f766e",
         "feedback_line": "#d97706",
+        "partial_fill": "#cbd5e1",
+        "partial_line": "#ea580c",
     },
 }
 
@@ -217,6 +221,7 @@ class AnalysisFigureWidget(QWidget):
 
     def _build_plot_specs(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
         charts = dict(payload.get("charts", {}))
+        chart_meta = dict(charts.get("meta", {}))
         event_metrics = dict(charts.get("event_metrics", {}))
         shoulders = list(charts.get("stability", {}).get("shoulders", []))
         elbows = list(charts.get("stability", {}).get("elbows", []))
@@ -262,13 +267,22 @@ class AnalysisFigureWidget(QWidget):
                 }
             )
         if window_scores:
+            note = "Wyniki policzone osobno dla kolejnych okien czasowych."
+            if chart_meta.get("is_partial"):
+                processed = int(chart_meta.get("processed_window_count", len(window_scores)))
+                captured = int(chart_meta.get("capture_window_count", processed))
+                note = (
+                    f"Analiza czesciowa: przetworzono {processed} z {captured} okien. "
+                    "Pionowa linia i zacienienie pokazuja nieprzetworzony koniec sesji."
+                )
             specs.append(
                 {
                     "kind": "window_scores",
                     "title": "Kolejnosc i wynik zbiorczy",
                     "chart_title": "Order & composite scores",
-                    "note": "Wyniki policzone osobno dla kolejnych okien czasowych.",
+                    "note": note,
                     "data": window_scores,
+                    "meta": chart_meta,
                 }
             )
         return specs
@@ -304,7 +318,7 @@ class AnalysisFigureWidget(QWidget):
         elif kind == "stability_elbows":
             self._plot_stability(ax, spec["data"], chart_title)
         else:
-            self._plot_window_scores(ax, spec["data"], chart_title)
+            self._plot_window_scores(ax, spec["data"], chart_title, spec.get("meta", {}))
 
     def _style_axes(self, ax) -> None:
         palette = self._palette()
@@ -365,16 +379,35 @@ class AnalysisFigureWidget(QWidget):
         ax.set_xticklabels(labels, rotation=0, ha="center", color=palette["text"])
         self._legend_below(ax, ["Reference pattern", "Measured"], palette)
 
-    def _plot_window_scores(self, ax, points: list[dict[str, Any]], title: str) -> None:
+    def _plot_window_scores(self, ax, points: list[dict[str, Any]], title: str, meta: dict[str, Any]) -> None:
         palette = self._palette()
-        x = [point.get("index", idx + 1) for idx, point in enumerate(points)]
-        labels = [f"W{point.get('window_index', idx)}" for idx, point in enumerate(points)]
+        x = [int(point.get("window_index", idx)) + 1 for idx, point in enumerate(points)]
         order_score = [float(point.get("order_score", 0.0)) for point in points]
         composite_score = [float(point.get("composite_score", 0.0)) for point in points]
         feedback_score = [point.get("feedback_score") for point in points]
+        total_windows = max(int(meta.get("capture_window_count", 0)), max(x, default=0))
+        if total_windows <= 0:
+            total_windows = len(points)
 
         order_line, = ax.plot(x, order_score, color=palette["pattern_line"], linewidth=2.0, marker="o", markersize=4, label="Order score")
         composite_line, = ax.plot(x, composite_score, color=palette["measured_line"], linewidth=2.3, marker="o", markersize=4, label="Composite score")
+
+        partial_line = None
+        missing_indices = [int(value) for value in meta.get("missing_window_indices", []) if isinstance(value, int)]
+        trailing_missing_start = meta.get("trailing_missing_start_index")
+        if missing_indices:
+            for missing_idx in missing_indices:
+                left = missing_idx + 0.5
+                right = missing_idx + 1.5
+                ax.axvspan(left, right, color=palette["partial_fill"], alpha=0.16, zorder=0)
+            if isinstance(trailing_missing_start, int):
+                partial_line = ax.axvline(
+                    trailing_missing_start + 0.5,
+                    color=palette["partial_line"],
+                    linewidth=1.8,
+                    linestyle="--",
+                    label="Session ended / not processed",
+                )
 
         feedback_points = [
             (xx, float(score))
@@ -402,13 +435,19 @@ class AnalysisFigureWidget(QWidget):
         if title:
             ax.set_title(title, loc="left", fontsize=11, fontweight="bold", color=palette["title"])
         ax.set_ylim(0, 105)
+        ax.set_xlim(0.5, total_windows + 0.5)
         ax.set_ylabel("Score", color=palette["text"])
         ax.set_xlabel("Time windows", color=palette["text"])
-        ax.set_xticks(x)
-        ax.set_xticklabels(labels, rotation=0, ha="center", color=palette["text"])
+        tick_step = max(1, total_windows // 12)
+        tick_positions = list(range(1, total_windows + 1, tick_step))
+        tick_labels = [f"W{pos - 1}" for pos in tick_positions]
+        ax.set_xticks(tick_positions)
+        ax.set_xticklabels(tick_labels, rotation=0, ha="center", color=palette["text"])
         handles = [order_line, composite_line]
         if feedback_line is not None:
             handles.append(feedback_line)
+        if partial_line is not None:
+            handles.append(partial_line)
         self._legend_below(ax, None, palette, handles=handles)
 
     def _legend_below(self, ax, labels: list[str] | None, palette: dict[str, str], *, handles=None) -> None:

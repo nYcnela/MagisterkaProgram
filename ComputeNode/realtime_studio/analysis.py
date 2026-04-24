@@ -59,6 +59,14 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     return out
 
 
+def _safe_score(value: Any) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, float) and (value != value or value == float("inf") or value == float("-inf")):
+        return None
+    return value
+
+
 def _mean(values: list[float]) -> float | None:
     if not values:
         return None
@@ -86,6 +94,48 @@ def _load_manifest_by_stem(path: Path) -> dict[str, dict[str, Any]]:
         if stem:
             out[stem] = item
     return out
+
+
+def _analysis_window_meta(
+    manifest_by_stem: dict[str, dict[str, Any]],
+    stage7_files: list[Path],
+) -> dict[str, Any]:
+    manifest_items = sorted(
+        (
+            item
+            for item in manifest_by_stem.values()
+            if isinstance(item, dict)
+        ),
+        key=lambda item: int(item.get("window_index", 0)),
+    )
+    processed_stems = {path.stem for path in stage7_files}
+    processed_items = [item for item in manifest_items if str(item.get("file_stem") or "") in processed_stems]
+    missing_items = [item for item in manifest_items if str(item.get("file_stem") or "") not in processed_stems]
+
+    processed_indices = [int(item.get("window_index", 0)) for item in processed_items]
+    missing_indices = [int(item.get("window_index", 0)) for item in missing_items]
+    processed_until_s = max((float(item.get("end_s", 0.0)) for item in processed_items), default=0.0)
+    capture_until_s = max((float(item.get("end_s", 0.0)) for item in manifest_items), default=processed_until_s)
+
+    trailing_missing_start = None
+    if missing_indices:
+        sorted_missing = sorted(missing_indices)
+        candidate = sorted_missing[0]
+        expected_suffix = list(range(candidate, candidate + len(sorted_missing)))
+        if sorted_missing == expected_suffix:
+            trailing_missing_start = candidate
+
+    return {
+        "capture_window_count": len(manifest_items),
+        "processed_window_count": len(processed_items),
+        "missing_window_count": len(missing_items),
+        "processed_window_indices": processed_indices,
+        "missing_window_indices": missing_indices,
+        "processed_until_s": round(processed_until_s, 3),
+        "capture_until_s": round(capture_until_s, 3),
+        "is_partial": bool(missing_items),
+        "trailing_missing_start_index": trailing_missing_start,
+    }
 
 
 @lru_cache(maxsize=8)
@@ -456,6 +506,7 @@ def build_run_analysis(cfg: ComputeNodeConfig, run_id: str) -> dict[str, Any]:
 
     manifest_by_stem = _load_manifest_by_stem(run_dir / "capture" / "windows_manifest.jsonl")
     feedback_map = _feedback_by_window(run_dir)
+    analysis_meta = _analysis_window_meta(manifest_by_stem, stage7_files)
 
     event_series: dict[str, list[dict[str, Any]]] = {key: [] for key in EVENT_METRIC_LABELS}
     stage7_items: list[dict[str, Any]] = []
@@ -488,7 +539,7 @@ def build_run_analysis(cfg: ComputeNodeConfig, run_id: str) -> dict[str, Any]:
                 "window_end": round(window_end, 3),
                 "order_score": int(window_record.get("order_score", 0)),
                 "composite_score": int(window_record.get("composite_score", 0)),
-                "feedback_score": feedback.get("score"),
+                "feedback_score": _safe_score(feedback.get("score")),
                 "feedback": feedback.get("feedback", ""),
                 "observed_sequence": list(window_record.get("current_sequence") or []),
             }
@@ -528,8 +579,15 @@ def build_run_analysis(cfg: ComputeNodeConfig, run_id: str) -> dict[str, Any]:
             "pattern_file": str(pattern_file.resolve()),
             "stage7_files": len(stage7_files),
             "window_count": len(window_scores),
+            "capture_window_count": int(analysis_meta.get("capture_window_count", len(window_scores))),
+            "processed_window_count": int(analysis_meta.get("processed_window_count", len(window_scores))),
+            "missing_window_count": int(analysis_meta.get("missing_window_count", 0)),
+            "analysis_is_partial": bool(analysis_meta.get("is_partial", False)),
+            "processed_until_s": float(analysis_meta.get("processed_until_s", 0.0)),
+            "capture_until_s": float(analysis_meta.get("capture_until_s", 0.0)),
         },
         "charts": {
+            "meta": analysis_meta,
             "event_metrics": {
                 metric_name: {
                     "title": EVENT_METRIC_LABELS[metric_name],
