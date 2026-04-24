@@ -79,6 +79,17 @@ class RemoteNodeClient(QObject):
     def set_dancer(self, first_name: str, last_name: str) -> None:
         self._request_json("POST", "/dancer/set", {"dancer_first_name": first_name, "dancer_last_name": last_name}, "set_dancer")
 
+    def apply_live_thresholds(self, live_z_threshold: float, live_major_order_threshold: int) -> None:
+        self._request_json(
+            "POST",
+            "/live-thresholds",
+            {
+                "live_z_threshold": float(live_z_threshold),
+                "live_major_order_threshold": int(live_major_order_threshold),
+            },
+            "live_thresholds",
+        )
+
     def fetch_analysis_runs(self) -> None:
         self._request_json("GET", "/analysis/runs", None, "analysis_runs")
 

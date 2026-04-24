@@ -457,6 +457,9 @@ class RemoteMainWindow(QMainWindow):
         tform.addRow("Prog Z", self.live_z_spin)
         tform.addRow("Prog kolejnosci", self.live_order_spin)
         thresh_layout.addLayout(tform)
+        self.apply_thresholds_btn = QPushButton("Zastosuj progi")
+        self.apply_thresholds_btn.setObjectName("SubtleBtn")
+        thresh_layout.addWidget(self.apply_thresholds_btn)
 
         # Actions card
         actions_card, actions_layout = self._card("Uruchom")
@@ -847,6 +850,7 @@ class RemoteMainWindow(QMainWindow):
         self.stop_session_btn.clicked.connect(self._stop_session_clicked)
         self.save_btn.clicked.connect(self._save_clicked)
         self.apply_dancer_btn.clicked.connect(self._apply_dancer_clicked)
+        self.apply_thresholds_btn.clicked.connect(self._apply_thresholds_clicked)
         self.dancer_first_name_edit.textChanged.connect(self._update_dancer_preview)
         self.dancer_last_name_edit.textChanged.connect(self._update_dancer_preview)
         self.analysis_refresh_btn.clicked.connect(self.client.fetch_analysis_runs)
@@ -998,10 +1002,27 @@ class RemoteMainWindow(QMainWindow):
         else:
             self._append_log("[INFO] Backend: sesje beda zapisywane do glownego katalogu (brak osoby).")
 
+    def _apply_thresholds_clicked(self) -> None:
+        self.cfg = self._collect_cfg()
+        save_remote_gui_config(self.cfg)
+        self.client.update_config(self.cfg)
+        self.client.apply_live_thresholds(
+            float(self.live_z_spin.value()),
+            int(self.live_order_spin.value()),
+        )
+        self._append_log(
+            f"[INFO] Zapisano i wyslano progi live: z={self.live_z_spin.value():.2f}, order={self.live_order_spin.value()}."
+        )
+
     def _save_clicked(self) -> None:
         self.cfg = self._collect_cfg()
         save_remote_gui_config(self.cfg)
-        self._append_log("[INFO] Zapisano konfiguracje.")
+        self.client.update_config(self.cfg)
+        self.client.apply_live_thresholds(
+            float(self.live_z_spin.value()),
+            int(self.live_order_spin.value()),
+        )
+        self._append_log("[INFO] Zapisano konfiguracje i wyslano progi live do ComputeNode.")
 
     # ── Event handlers ────────────────────────────────────
 
@@ -1067,6 +1088,11 @@ class RemoteMainWindow(QMainWindow):
         elif kind == "session_stopped":
             self.session_label.setText("Sesja: -")
             self.client.fetch_analysis_runs()
+        elif kind == "live_thresholds_updated":
+            self._append_log(
+                "[INFO] ComputeNode przyjal progi live: "
+                f"z={payload.get('live_z_threshold', '')}, order={payload.get('live_major_order_threshold', '')}"
+            )
 
     def _on_response(self, tag: str, payload: dict) -> None:
         if "snapshot" in payload:

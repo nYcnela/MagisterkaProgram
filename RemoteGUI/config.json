@@ -7,7 +7,7 @@
   "dance_id": "k_obrot_uklon_polonez",
   "sequence_name": "udp_sequence",
   "step_type": "static",
-  "live_z_threshold": 1.7,
+  "live_z_threshold": 1.2,
   "live_major_order_threshold": 60,
   "analysis_chart_theme": "dark",
   "auto_start_llm": false

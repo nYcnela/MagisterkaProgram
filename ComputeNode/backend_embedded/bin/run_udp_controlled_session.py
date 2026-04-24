@@ -294,6 +294,7 @@ class ControlServer:
         self.last_payload: dict[str, Any] = {}
         self.active_meta: dict[str, Any] = {}
         self.dancer_context: dict[str, Any] = {}
+        self.runtime_context: dict[str, Any] = {}
 
     def _resolve_pattern_file(self, payload: dict[str, Any]) -> tuple[str, Path]:
         dance_id = str(payload.get("dance_id") or payload.get("dance") or "").strip()
@@ -339,6 +340,15 @@ class ControlServer:
             print(f"[CONTROL] SET_DANCER first={first!r} last={last!r}")
             return
 
+        if msg_type == "set_live_thresholds":
+            self.runtime_context = {}
+            if "live_z_threshold" in msg:
+                self.runtime_context["live_z_threshold"] = float(msg.get("live_z_threshold"))
+            if "live_major_order_threshold" in msg:
+                self.runtime_context["live_major_order_threshold"] = int(msg.get("live_major_order_threshold"))
+            print(f"[CONTROL] SET_LIVE_THRESHOLDS {json.dumps(self.runtime_context, ensure_ascii=False)}")
+            return
+
         if msg_type in {"session_prepare", "prepare"}:
             self.last_payload = dict(msg)
             session_id = str(msg.get("session_id") or f"s{int(time.time())}")
@@ -349,7 +359,8 @@ class ControlServer:
             return
 
         if msg_type in {"session_start", "start_now", "start"}:
-            merged = dict(self.dancer_context)  # base: persistent dancer context
+            merged = dict(self.runtime_context)  # base: persistent runtime context
+            merged.update(self.dancer_context)   # then persistent dancer context
             merged.update(self.last_payload)    # override with prepare payload
             merged.update(msg)                  # override with start payload
 

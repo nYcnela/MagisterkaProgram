@@ -263,18 +263,20 @@ def _live_feedback_settings(session_meta: dict[str, Any], cfg: ComputeNodeConfig
     control_payload = session_meta.get("control_payload")
     control_payload = control_payload if isinstance(control_payload, dict) else {}
     try:
-        live_z_threshold = float(control_payload.get("live_z_threshold", cfg.live_z_threshold))
+        session_live_z_threshold = float(control_payload.get("live_z_threshold", cfg.live_z_threshold))
     except Exception:
-        live_z_threshold = float(cfg.live_z_threshold)
+        session_live_z_threshold = float(cfg.live_z_threshold)
     try:
-        live_major_order_threshold = int(
+        session_live_major_order_threshold = int(
             control_payload.get("live_major_order_threshold", cfg.live_major_order_threshold)
         )
     except Exception:
-        live_major_order_threshold = int(cfg.live_major_order_threshold)
+        session_live_major_order_threshold = int(cfg.live_major_order_threshold)
     return {
-        "live_z_threshold": round(live_z_threshold, 4),
-        "live_major_order_threshold": live_major_order_threshold,
+        "live_z_threshold": round(float(cfg.live_z_threshold), 4),
+        "live_major_order_threshold": int(cfg.live_major_order_threshold),
+        "session_live_z_threshold": round(session_live_z_threshold, 4),
+        "session_live_major_order_threshold": session_live_major_order_threshold,
     }
 
 

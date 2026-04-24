@@ -19,8 +19,16 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 
 from .analysis import build_run_analysis, list_analysis_runs
-from .compute_settings import ComputeNodeConfig, load_compute_config
-from .control_contracts import NodeSnapshot, ProcessStatus, SessionStartRequest, SessionStopRequest, SetDancerRequest, WsEvent
+from .compute_settings import ComputeNodeConfig, load_compute_config, save_compute_config
+from .control_contracts import (
+    LiveThresholdsRequest,
+    NodeSnapshot,
+    ProcessStatus,
+    SessionStartRequest,
+    SessionStopRequest,
+    SetDancerRequest,
+    WsEvent,
+)
 from .launch import build_backend_command, build_llm_command, extract_feedback_text, extract_model_input_text
 from .settings import StudioConfig
 
@@ -436,6 +444,37 @@ class ComputeNodeManager:
         self._append_log("node", f"Sent set_dancer first={first_name.strip()!r} last={last_name.strip()!r}")
         return payload
 
+    def apply_live_thresholds(self, live_z_threshold: float, live_major_order_threshold: int) -> dict:
+        live_z_threshold = float(live_z_threshold)
+        live_major_order_threshold = int(live_major_order_threshold)
+
+        with self._lock:
+            self.cfg.live_z_threshold = live_z_threshold
+            self.cfg.live_major_order_threshold = live_major_order_threshold
+            save_compute_config(self.cfg)
+            backend_running = self._backend_proc is not None and self._backend_proc.poll() is None
+
+        payload = {
+            "type": "set_live_thresholds",
+            "live_z_threshold": live_z_threshold,
+            "live_major_order_threshold": live_major_order_threshold,
+        }
+        if backend_running:
+            self._send_control_packet(payload)
+        self._append_log(
+            "node",
+            f"Applied live thresholds z={live_z_threshold:.2f} order={live_major_order_threshold}",
+        )
+        self._publish(
+            "live_thresholds_updated",
+            {
+                "live_z_threshold": live_z_threshold,
+                "live_major_order_threshold": live_major_order_threshold,
+                "backend_running": backend_running,
+            },
+        )
+        return payload
+
     def stop_session(self, req: SessionStopRequest) -> dict:
         payload = {"type": "session_end", "reason": req.reason}
         self._send_control_packet(payload)
@@ -546,6 +585,11 @@ def create_app(cfg: ComputeNodeConfig | None = None) -> FastAPI:
     def dancer_set(req: SetDancerRequest):
         payload = manager.set_dancer(req.dancer_first_name, req.dancer_last_name)
         return {"sent": payload}
+
+    @app.post("/live-thresholds")
+    def live_thresholds(req: LiveThresholdsRequest):
+        payload = manager.apply_live_thresholds(req.live_z_threshold, req.live_major_order_threshold)
+        return {"sent": payload, "snapshot": manager.snapshot_data().model_dump()}
 
     @app.post("/session/stop")
     def session_stop(req: SessionStopRequest):

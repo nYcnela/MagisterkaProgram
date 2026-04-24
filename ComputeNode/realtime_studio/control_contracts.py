@@ -44,3 +44,7 @@ class SetDancerRequest(BaseModel):
 class SessionStopRequest(BaseModel):
     reason: str = "remote_gui"
 
+
+class LiveThresholdsRequest(BaseModel):
+    live_z_threshold: float
+    live_major_order_threshold: int
