@@ -18,12 +18,14 @@ from typing import Optional
 import uvicorn
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 
-from .analysis import build_run_analysis, list_analysis_runs
+from .analysis import _analysis_roots, _find_run_dir, build_run_analysis, list_analysis_runs
 from .compute_settings import ComputeNodeConfig, load_compute_config, save_compute_config
 from .control_contracts import (
     LiveThresholdsRequest,
     NodeSnapshot,
     ProcessStatus,
+    ReplayRunRequest,
+    SessionPrepareRequest,
     SessionStartRequest,
     SessionStopRequest,
     SetDancerRequest,
@@ -31,6 +33,7 @@ from .control_contracts import (
 )
 from .launch import build_backend_command, build_llm_command, extract_feedback_text, extract_model_input_text
 from .settings import StudioConfig
+from .udp_replay import replay_csv_files
 
 
 def _kill_process_tree(proc: subprocess.Popen[str]) -> None:
@@ -101,6 +104,7 @@ class ComputeNodeManager:
         self._llm_proc: Optional[subprocess.Popen[str]] = None
         self._backend_thread: Optional[threading.Thread] = None
         self._llm_thread: Optional[threading.Thread] = None
+        self._replay_thread: Optional[threading.Thread] = None
         self._llm_external = False
 
         self._vr_sock: socket.socket | None = None
@@ -196,6 +200,7 @@ class ComputeNodeManager:
                 self.snapshot.session_active = True
                 self.snapshot.session_id = session_id
                 self.snapshot.dance_id = dance_id
+                self.snapshot.last_feedback = ""
                 if run_id:
                     self.snapshot.run_id = run_id
             with self._lock:
@@ -413,6 +418,27 @@ class ComputeNodeManager:
         finally:
             sock.close()
 
+    def prepare_session(self, req: SessionPrepareRequest) -> dict:
+        with self._lock:
+            proc = self._backend_proc
+        if proc is None or proc.poll() is not None:
+            raise RuntimeError("Backend is not running.")
+
+        session_id = req.session_id.strip() or f"s{int(time.time())}"
+        payload = {
+            "type": "session_prepare",
+            "session_id": session_id,
+            "dance_id": req.dance_id,
+            "sequence_name": req.sequence_name,
+            "step_type": req.step_type,
+        }
+        if req.run_id.strip():
+            payload["run_id"] = req.run_id.strip()
+        payload.update(req.extra)
+        self._send_control_packet(payload)
+        self._append_log("node", f"Sent session_prepare for {session_id}")
+        return payload
+
     def start_session(self, req: SessionStartRequest) -> dict:
         with self._lock:
             proc = self._backend_proc
@@ -480,6 +506,45 @@ class ComputeNodeManager:
         self._send_control_packet(payload)
         self._append_log("node", f"Sent session_end reason={req.reason}")
         return payload
+
+    def replay_run(self, req: ReplayRunRequest) -> dict:
+        with self._lock:
+            proc = self._backend_proc
+            replay_thread = self._replay_thread
+        if proc is None or proc.poll() is not None:
+            raise RuntimeError("Backend is not running.")
+        if replay_thread is not None and replay_thread.is_alive():
+            raise RuntimeError("Another run replay is already active.")
+
+        _backend_root, output_root, _pattern_root = _analysis_roots(self.cfg)
+        run_dir = _find_run_dir(output_root, req.run_id.strip())
+        if run_dir is None:
+            raise FileNotFoundError(f"Missing run directory: {req.run_id}")
+        csv_paths = sorted((run_dir / "capture" / "raw").glob("*/*.csv"))
+        if not csv_paths:
+            raise FileNotFoundError(f"No captured raw CSV files for run: {req.run_id}")
+
+        def _worker() -> None:
+            try:
+                self._append_log("node", f"Replay started for run={req.run_id} csv={len(csv_paths)}")
+                stats = replay_csv_files(
+                    csv_paths,
+                    dst_host="127.0.0.1",
+                    dst_port=int(self.cfg.udp_data_port),
+                    send_hz=float(req.send_hz),
+                    dedupe_frames=True,
+                )
+                self._append_log("node", f"Replay finished for run={req.run_id}: {stats}")
+                self._publish("simulation_replay_finished", {"run_id": req.run_id, **stats})
+            except Exception as exc:
+                self._append_log("node", f"Replay failed for run={req.run_id}: {exc}")
+                self._publish("simulation_replay_failed", {"run_id": req.run_id, "error": str(exc)})
+
+        thread = threading.Thread(target=_worker, name=f"replay-{req.run_id}", daemon=True)
+        with self._lock:
+            self._replay_thread = thread
+        thread.start()
+        return {"run_id": req.run_id, "csv_count": len(csv_paths)}
 
     def snapshot_data(self) -> NodeSnapshot:
         with self._lock:
@@ -581,6 +646,14 @@ def create_app(cfg: ComputeNodeConfig | None = None) -> FastAPI:
             raise HTTPException(status_code=409, detail=str(exc))
         return {"sent": payload, "snapshot": manager.snapshot_data().model_dump()}
 
+    @app.post("/session/prepare")
+    def session_prepare(req: SessionPrepareRequest):
+        try:
+            payload = manager.prepare_session(req)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+        return {"sent": payload, "snapshot": manager.snapshot_data().model_dump()}
+
     @app.post("/dancer/set")
     def dancer_set(req: SetDancerRequest):
         payload = manager.set_dancer(req.dancer_first_name, req.dancer_last_name)
@@ -594,6 +667,18 @@ def create_app(cfg: ComputeNodeConfig | None = None) -> FastAPI:
     @app.post("/session/stop")
     def session_stop(req: SessionStopRequest):
         payload = manager.stop_session(req)
+        return {"sent": payload, "snapshot": manager.snapshot_data().model_dump()}
+
+    @app.post("/simulation/replay-run")
+    def simulation_replay_run(req: ReplayRunRequest):
+        try:
+            payload = manager.replay_run(req)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
         return {"sent": payload, "snapshot": manager.snapshot_data().model_dump()}
 
     @app.get("/analysis/runs")

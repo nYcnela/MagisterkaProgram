@@ -4,11 +4,12 @@
   "auto_connect": true,
   "dancer_first_name": "Testowa",
   "dancer_last_name": "Osoba",
-  "dance_id": "k_obrot_uklon_polonez",
+  "dance_id": "k_krok_podstawowy_polonez",
   "sequence_name": "udp_sequence",
-  "step_type": "static",
+  "step_type": "step",
   "live_z_threshold": 1.7,
   "live_major_order_threshold": 60,
+  "simulation_udp_port": 5005,
   "analysis_chart_theme": "dark",
   "auto_start_llm": false
 }

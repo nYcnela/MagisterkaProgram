@@ -78,6 +78,12 @@ QLabel#Hint {
   color: #9cc4ef;
   font-size: 12px;
 }
+QLabel#FieldLabel {
+  color: #9cc4ef;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 0 0 0;
+}
 
 /* ── Inputs ───────────────────────────────────────────── */
 QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {

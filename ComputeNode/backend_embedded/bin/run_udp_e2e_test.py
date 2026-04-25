@@ -158,6 +158,12 @@ def _window_record_to_model_input(
     major_order_threshold: int = LIVE_MAJOR_ORDER_THRESHOLD,
     emit_minor_order_text: bool = LIVE_EMIT_MINOR_ORDER_TEXT,
 ) -> Dict[str, str]:
+    if not list(window_record.get("current_sequence") or []):
+        return {
+            "instruction": MODEL_INSTRUCTION,
+            "input": "Start dancing.",
+        }
+
     metrics_summary = dict(window_record.get("metrics_summary") or {})
     order_score = window_record.get("order_score")
     errors_detected = list(window_record.get("errors_detected") or [])
@@ -181,6 +187,15 @@ def _window_record_to_model_input(
     return {
         "instruction": MODEL_INSTRUCTION,
         "input": input_text,
+    }
+
+
+def _no_sequence_feedback() -> Dict[str, Any]:
+    return {
+        "feedback": "Start dancing. Score: 1",
+        "score": 1,
+        "latency_s": 0.0,
+        "source": "rule:no_sequence_detected",
     }
 
 
@@ -733,7 +748,10 @@ def main() -> int:
 
                     # optional: call LLM server and save feedback
                     if args.llm_url and feedback_path is not None:
-                        fb = _call_llm_server(args.llm_url, rec)
+                        if not list(window_record.get("current_sequence") or []):
+                            fb = _no_sequence_feedback()
+                        else:
+                            fb = _call_llm_server(args.llm_url, rec)
                         if fb is not None:
                             fb_rec = {
                                 "window_index": manifest.get("window_index"),

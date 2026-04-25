@@ -462,6 +462,9 @@ def generate_description(
       order_text  -> komentarz o sekwencji,
       top_info    -> lista nazw najgorszych segmentów dla debugu
     """
+    if errors_detected and "no_sequence_detected" in set(errors_detected):
+        return "Start dancing.", "", ["no_sequence_detected"]
+
     EXCLUDED_KEYS = {"bow", "arm_stability_x", "arm_stability_y", "elbow_stability"}
 
     # 1. zbierz max |z| dla każdego segmentu

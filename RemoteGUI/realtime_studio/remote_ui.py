@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from pathlib import Path
+import threading
 import time
 from typing import Any
 
-from PySide6.QtCore import Qt, QRect, QTimer
+from PySide6.QtCore import Qt, QRect, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QBrush, QPaintEvent
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -34,6 +36,7 @@ from PySide6.QtWidgets import (
 from .analysis_view import AnalysisFigureWidget
 from .remote_client import RemoteNodeClient
 from .remote_settings import RemoteGuiConfig, load_remote_gui_config, save_remote_gui_config
+from .simulation import TestCsvSource, list_test_csv_sources, replay_csv
 
 
 DANCE_CHOICES = [
@@ -179,11 +182,18 @@ class _SeqDiagram(QWidget):
 
 
 class RemoteMainWindow(QMainWindow):
+    _simulation_done = Signal(bool, str)
+
     def __init__(self) -> None:
         super().__init__()
         self.cfg = load_remote_gui_config()
         self.client = RemoteNodeClient(self.cfg)
         self._analysis_runs: list[dict[str, Any]] = []
+        self._test_csv_sources: list[TestCsvSource] = []
+        self._simulation_thread: threading.Thread | None = None
+        self._simulation_stop = threading.Event()
+        self._simulation_session_id = ""
+        self._simulation_run_id = ""
         self._nav_buttons: list[QPushButton] = []
         self._build_ui()
         self._load_into_widgets()
@@ -414,16 +424,82 @@ class RemoteMainWindow(QMainWindow):
         llm_btns.addWidget(self.stop_llm_btn)
         llm_layout.addLayout(llm_btns)
 
-        # Session control card
-        session_card, session_layout = self._card("Parametry sesji")
-        form = self._new_form()
+        # Simulation/session control card
+        session_card, session_layout = self._card("Symulacja przesylania danych")
+        sim_fields = QVBoxLayout()
+        sim_fields.setSpacing(6)
+        self.simulation_source_combo = self._styled_combo()
+        self.simulation_source_combo.addItem("TestData CSV z RemoteGUI", "test_csv")
+        self.simulation_source_combo.addItem("Run zapisany w ComputeNode", "run")
+        self.simulation_source_combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.simulation_source_combo.setMinimumContentsLength(18)
+        self.simulation_item_label = QLabel("CSV testowy")
+        self.simulation_item_label.setObjectName("FieldLabel")
+        self.simulation_item_combo = self._styled_combo()
+        self.simulation_item_combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.simulation_item_combo.setMinimumContentsLength(22)
         self.dance_id_combo = self._styled_combo()
         self.dance_id_combo.setEditable(False)
         self.dance_id_combo.addItems(DANCE_CHOICES)
+        self.dance_id_combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.dance_id_combo.setMinimumContentsLength(22)
+        # Techniczne pole do payloadu. Uzytkownik nie musi recznie wybierac sekwencji.
         self.sequence_name_edit = QLineEdit()
-        form.addRow("ID tanca", self.dance_id_combo)
-        form.addRow("Sekwencja", self.sequence_name_edit)
-        session_layout.addLayout(form)
+        self.simulation_udp_port_spin = QSpinBox()
+        self.simulation_udp_port_spin.setRange(1, 65535)
+
+        def add_stacked_field(label_text: str, widget: QWidget) -> None:
+            label = QLabel(label_text)
+            label.setObjectName("FieldLabel")
+            label.setWordWrap(True)
+            sim_fields.addWidget(label)
+            sim_fields.addWidget(widget)
+            sim_fields.addSpacing(2)
+
+        add_stacked_field("Zrodlo danych", self.simulation_source_combo)
+        sim_fields.addWidget(self.simulation_item_label)
+        sim_fields.addWidget(self.simulation_item_combo)
+        sim_fields.addSpacing(2)
+        add_stacked_field("ID tanca", self.dance_id_combo)
+        add_stacked_field("Port UDP danych", self.simulation_udp_port_spin)
+        session_layout.addLayout(sim_fields)
+        self.simulation_hint_label = QLabel(
+            "Prepare zapamietuje ID sesji i tanca, Start sesji uruchamia przechwytywanie, "
+            "a Symuluj przesylanie wysyla wybrane dane ruchu do ComputeNode."
+        )
+        self.simulation_hint_label.setObjectName("Hint")
+        self.simulation_hint_label.setWordWrap(True)
+        session_layout.addWidget(self.simulation_hint_label)
+
+        self.refresh_simulation_runs_btn = QPushButton("Odswiez runy")
+        self.refresh_simulation_runs_btn.setObjectName("SubtleBtn")
+        session_layout.addWidget(self.refresh_simulation_runs_btn)
+
+        sim_row1 = QHBoxLayout()
+        sim_row1.setSpacing(8)
+        self.prepare_session_btn = QPushButton("Session prepare")
+        self.prepare_session_btn.setObjectName("SubtleBtn")
+        self.start_session_btn = QPushButton("Start sesji")
+        self.start_session_btn.setObjectName("AccentBtn")
+        sim_row1.addWidget(self.prepare_session_btn)
+        sim_row1.addWidget(self.start_session_btn)
+        session_layout.addLayout(sim_row1)
+
+        sim_row2 = QHBoxLayout()
+        sim_row2.setSpacing(8)
+        self.simulate_stream_btn = QPushButton("Symuluj przesylanie")
+        self.simulate_stream_btn.setObjectName("AccentBtn")
+        self.stop_session_btn = QPushButton("Session end")
+        self.stop_session_btn.setObjectName("DangerBtn")
+        sim_row2.addWidget(self.simulate_stream_btn)
+        sim_row2.addWidget(self.stop_session_btn)
+        session_layout.addLayout(sim_row2)
 
         # Participant card
         part_card, part_layout = self._card("Osoba")
@@ -462,7 +538,7 @@ class RemoteMainWindow(QMainWindow):
         thresh_layout.addWidget(self.apply_thresholds_btn)
 
         # Actions card
-        actions_card, actions_layout = self._card("Uruchom")
+        actions_card, actions_layout = self._card("Backend")
         row1 = QHBoxLayout()
         row1.setSpacing(8)
         self.start_backend_btn = QPushButton("Start backend")
@@ -472,16 +548,6 @@ class RemoteMainWindow(QMainWindow):
         row1.addWidget(self.start_backend_btn)
         row1.addWidget(self.stop_backend_btn)
         actions_layout.addLayout(row1)
-
-        row2 = QHBoxLayout()
-        row2.setSpacing(8)
-        self.start_session_btn = QPushButton("Start sesji")
-        self.start_session_btn.setObjectName("AccentBtn")
-        self.stop_session_btn = QPushButton("Stop sesji")
-        self.stop_session_btn.setObjectName("DangerBtn")
-        row2.addWidget(self.start_session_btn)
-        row2.addWidget(self.stop_session_btn)
-        actions_layout.addLayout(row2)
 
         return self._scroll_page(session_card, part_card, thresh_card, actions_card, llm_card)
 
@@ -850,8 +916,13 @@ class RemoteMainWindow(QMainWindow):
         self.stop_llm_btn.clicked.connect(self._stop_llm_clicked)
         self.start_backend_btn.clicked.connect(self._start_backend_clicked)
         self.stop_backend_btn.clicked.connect(self._stop_backend_clicked)
+        self.prepare_session_btn.clicked.connect(self._prepare_session_clicked)
         self.start_session_btn.clicked.connect(self._start_session_clicked)
+        self.simulate_stream_btn.clicked.connect(self._simulate_stream_clicked)
         self.stop_session_btn.clicked.connect(self._stop_session_clicked)
+        self.refresh_simulation_runs_btn.clicked.connect(self.client.fetch_analysis_runs)
+        self.simulation_source_combo.currentIndexChanged.connect(self._simulation_source_changed)
+        self.simulation_item_combo.currentIndexChanged.connect(self._simulation_selection_changed)
         self.save_btn.clicked.connect(self._save_clicked)
         self.apply_dancer_btn.clicked.connect(self._apply_dancer_clicked)
         self.apply_thresholds_btn.clicked.connect(self._apply_thresholds_clicked)
@@ -875,6 +946,7 @@ class RemoteMainWindow(QMainWindow):
         self.client.event_received.connect(self._apply_event)
         self.client.response.connect(self._on_response)
         self.client.error.connect(self._append_error)
+        self._simulation_done.connect(self._on_simulation_done)
 
     def _collect_cfg(self) -> RemoteGuiConfig:
         return RemoteGuiConfig(
@@ -888,6 +960,7 @@ class RemoteMainWindow(QMainWindow):
             step_type=_step_type_for_dance(self.dance_id_combo.currentText()),
             live_z_threshold=float(self.live_z_spin.value()),
             live_major_order_threshold=int(self.live_order_spin.value()),
+            simulation_udp_port=int(self.simulation_udp_port_spin.value()),
             analysis_chart_theme=_THEME_MAP.get(self.analysis_theme_combo.currentText(), "dark"),
             auto_start_llm=bool(self.auto_start_llm_check.isChecked()),
         )
@@ -902,6 +975,7 @@ class RemoteMainWindow(QMainWindow):
         if idx >= 0:
             self.dance_id_combo.setCurrentIndex(idx)
         self.sequence_name_edit.setText(self.cfg.sequence_name)
+        self.simulation_udp_port_spin.setValue(int(self.cfg.simulation_udp_port))
         self.live_z_spin.setValue(self.cfg.live_z_threshold)
         self.live_order_spin.setValue(self.cfg.live_major_order_threshold)
         self.analysis_theme_combo.blockSignals(True)
@@ -911,6 +985,9 @@ class RemoteMainWindow(QMainWindow):
         self.auto_start_llm_check.setChecked(self.cfg.auto_start_llm)
         self.node_url_label.setText(f"API: http://{self.cfg.node_host}:{self.cfg.node_port}")
         self.analysis_chart.set_theme(self.cfg.analysis_chart_theme)
+        self._refresh_test_csv_sources()
+        self._refresh_simulation_run_combo()
+        self._simulation_source_changed()
         self._update_dancer_preview()
 
     # ── Pill helper ───────────────────────────────────────
@@ -929,6 +1006,129 @@ class RemoteMainWindow(QMainWindow):
             f"background:{color}; border-radius:4px;"
         )
         text_label.setText(state if not details else f"{state} \u00b7 {details}")
+
+    # ── Simulation helpers ───────────────────────────────────
+
+    def _set_dance_combo_value(self, dance_id: str) -> None:
+        if not dance_id:
+            return
+        index = self.dance_id_combo.findText(dance_id)
+        if index >= 0:
+            self.dance_id_combo.setCurrentIndex(index)
+
+    def _refresh_test_csv_sources(self) -> None:
+        self._test_csv_sources = list_test_csv_sources(DANCE_CHOICES)
+        if self.simulation_source_combo.currentData() == "test_csv":
+            self._refresh_simulation_item_combo()
+
+    def _refresh_simulation_run_combo(self) -> None:
+        if self.simulation_source_combo.currentData() == "run":
+            self._refresh_simulation_item_combo()
+
+    def _refresh_simulation_item_combo(self) -> None:
+        source_kind = self.simulation_source_combo.currentData()
+        current_data = self.simulation_item_combo.currentData() or {}
+        current_path = str(current_data.get("csv_path") or "") if isinstance(current_data, dict) else ""
+        current_run_id = str(current_data.get("run_id") or "") if isinstance(current_data, dict) else ""
+
+        self.simulation_item_combo.blockSignals(True)
+        self.simulation_item_combo.clear()
+        if source_kind == "run":
+            self.simulation_item_label.setText("Run z ComputeNode")
+            for item in self._analysis_runs:
+                run_id = str(item.get("run_id") or "").strip()
+                if not run_id:
+                    continue
+                created_at = str(item.get("created_at") or "-")
+                dance_id = str(item.get("dance_id") or "-")
+                dancer = str(item.get("dancer_name") or "bez osoby")
+                self.simulation_item_combo.addItem(f"{created_at} | {dance_id} | {dancer}", dict(item))
+            index = -1
+            for idx in range(self.simulation_item_combo.count()):
+                payload = self.simulation_item_combo.itemData(idx) or {}
+                if str(payload.get("run_id") or "") == current_run_id:
+                    index = idx
+                    break
+            self.simulation_item_combo.setCurrentIndex(
+                index if index >= 0 else (0 if self.simulation_item_combo.count() else -1)
+            )
+        else:
+            self.simulation_item_label.setText("CSV testowy")
+            for source in self._test_csv_sources:
+                self.simulation_item_combo.addItem(
+                    source.label,
+                    {"csv_path": str(source.csv_path), "dance_id": source.dance_id},
+                )
+            index = -1
+            for idx in range(self.simulation_item_combo.count()):
+                payload = self.simulation_item_combo.itemData(idx) or {}
+                if str(payload.get("csv_path") or "") == current_path:
+                    index = idx
+                    break
+            if index < 0 and self.cfg.dance_id:
+                for idx in range(self.simulation_item_combo.count()):
+                    payload = self.simulation_item_combo.itemData(idx) or {}
+                    if str(payload.get("dance_id") or "") == self.cfg.dance_id:
+                        index = idx
+                        break
+            self.simulation_item_combo.setCurrentIndex(
+                index if index >= 0 else (0 if self.simulation_item_combo.count() else -1)
+            )
+        self.simulation_item_combo.blockSignals(False)
+
+    def _simulation_source_changed(self) -> None:
+        self._refresh_simulation_item_combo()
+        self._simulation_selection_changed()
+
+    def _simulation_selection_changed(self) -> None:
+        self._simulation_session_id = ""
+        self._simulation_run_id = ""
+        source_kind = self.simulation_source_combo.currentData()
+        selected_payload = self.simulation_item_combo.currentData() or {}
+        if source_kind == "run":
+            run_payload = selected_payload if isinstance(selected_payload, dict) else {}
+            self._set_dance_combo_value(str(run_payload.get("dance_id") or ""))
+            sequence_name = str(run_payload.get("sequence_name") or "").strip()
+            if sequence_name:
+                self.sequence_name_edit.setText(sequence_name)
+        else:
+            csv_payload = selected_payload if isinstance(selected_payload, dict) else {}
+            self._set_dance_combo_value(str(csv_payload.get("dance_id") or ""))
+            self.sequence_name_edit.setText("udp_sequence")
+
+    def _simulation_extra(self) -> dict[str, object]:
+        extra: dict[str, object] = {
+            "live_z_threshold": float(self.live_z_spin.value()),
+            "live_major_order_threshold": int(self.live_order_spin.value()),
+        }
+        dancer_first_name = self.dancer_first_name_edit.text().strip()
+        dancer_last_name = self.dancer_last_name_edit.text().strip()
+        if dancer_first_name:
+            extra["dancer_first_name"] = dancer_first_name
+        if dancer_last_name:
+            extra["dancer_last_name"] = dancer_last_name
+        return extra
+
+    def _ensure_simulation_ids(self, dance_id: str) -> tuple[str, str]:
+        if not self._simulation_session_id:
+            self._simulation_session_id = f"sim_{int(time.time())}"
+        if not getattr(self, "_simulation_run_id", ""):
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            safe_dance = dance_id.replace("/", "_")
+            self._simulation_run_id = f"session_{safe_dance}_{self._simulation_session_id}_{timestamp}"
+        return self._simulation_session_id, self._simulation_run_id
+
+    def _build_session_payload(self) -> dict[str, object]:
+        dance_id = self.dance_id_combo.currentText().strip()
+        session_id, run_id = self._ensure_simulation_ids(dance_id)
+        return {
+            "dance_id": dance_id,
+            "sequence_name": self.sequence_name_edit.text().strip() or "udp_sequence",
+            "step_type": _step_type_for_dance(dance_id),
+            "session_id": session_id,
+            "run_id": run_id,
+            "extra": self._simulation_extra(),
+        }
 
     # ── Button handlers ───────────────────────────────────
 
@@ -958,30 +1158,84 @@ class RemoteMainWindow(QMainWindow):
         self._set_pill(self.backend_state_dot, self.backend_state_text, "STOPPED", "stopping...")
         self.client.stop_backend()
 
-    def _start_session_clicked(self) -> None:
-        extra: dict[str, object] = {
-            "live_z_threshold": float(self.live_z_spin.value()),
-            "live_major_order_threshold": int(self.live_order_spin.value()),
-        }
-        dancer_first_name = self.dancer_first_name_edit.text().strip()
-        dancer_last_name = self.dancer_last_name_edit.text().strip()
-        if dancer_first_name:
-            extra["dancer_first_name"] = dancer_first_name
-        if dancer_last_name:
-            extra["dancer_last_name"] = dancer_last_name
+    def _prepare_session_clicked(self) -> None:
+        self.cfg = self._collect_cfg()
+        save_remote_gui_config(self.cfg)
+        self.client.update_config(self.cfg)
+        payload = self._build_session_payload()
+        self.client.prepare_session(payload)
+        self._append_log(
+            f"[INFO] Wyslano session_prepare: {payload.get('session_id')} / {payload.get('dance_id')}"
+        )
 
-        payload = {
-            "dance_id": self.dance_id_combo.currentText().strip(),
-            "sequence_name": self.sequence_name_edit.text().strip(),
-            "step_type": _step_type_for_dance(self.dance_id_combo.currentText()),
-            "session_id": f"k2_{int(time.time())}",
-            "extra": extra,
-        }
+    def _start_session_clicked(self) -> None:
+        self.cfg = self._collect_cfg()
+        save_remote_gui_config(self.cfg)
+        self.client.update_config(self.cfg)
+        payload = self._build_session_payload()
         self.client.start_session(payload)
+        self._append_log(
+            f"[INFO] Wyslano session_start: {payload.get('session_id')} / {payload.get('dance_id')}"
+        )
+
+    def _simulate_stream_clicked(self) -> None:
+        self.cfg = self._collect_cfg()
+        save_remote_gui_config(self.cfg)
+        self.client.update_config(self.cfg)
+        source_kind = self.simulation_source_combo.currentData()
+        selected_payload = self.simulation_item_combo.currentData() or {}
+        if source_kind == "run":
+            run_payload = selected_payload if isinstance(selected_payload, dict) else {}
+            run_id = str(run_payload.get("run_id") or "").strip()
+            if not run_id:
+                self._append_error("Nie wybrano runu ComputeNode do symulacji.")
+                return
+            self.client.replay_run({"run_id": run_id, "send_hz": 0.0})
+            self._append_log(f"[INFO] Zlecono ComputeNode ponowna symulacje runu: {run_id}")
+            return
+
+        csv_payload = selected_payload if isinstance(selected_payload, dict) else {}
+        csv_path = Path(str(csv_payload.get("csv_path") or ""))
+        if not csv_path.exists():
+            self._append_error("Nie wybrano poprawnego pliku CSV z TestData.")
+            return
+        if self._simulation_thread is not None and self._simulation_thread.is_alive():
+            self._append_error("Symulacja CSV juz trwa.")
+            return
+
+        self._simulation_stop.clear()
+        self.simulate_stream_btn.setEnabled(False)
+        dst_host = self.node_host_edit.text().strip()
+        dst_port = int(self.simulation_udp_port_spin.value())
+
+        def _worker() -> None:
+            try:
+                stats = replay_csv(
+                    csv_path,
+                    dst_host=dst_host,
+                    dst_port=dst_port,
+                    stop_event=self._simulation_stop,
+                )
+                self._simulation_done.emit(
+                    True,
+                    f"Zakonczono symulacje CSV: {csv_path.name}, wyslano {stats.get('sent_frames')} ramek.",
+                )
+            except Exception as exc:
+                self._simulation_done.emit(False, f"Symulacja CSV nie powiodla sie: {exc}")
+
+        self._simulation_thread = threading.Thread(target=_worker, name="remote-csv-simulation", daemon=True)
+        self._simulation_thread.start()
+        self._append_log(f"[INFO] Start symulacji CSV -> {dst_host}:{dst_port}: {csv_path.name}")
 
     def _stop_session_clicked(self) -> None:
+        self._simulation_stop.set()
         self.session_label.setText("Sesja: (stopping...)")
         self.client.stop_session({"reason": "remote_gui"})
+
+    def _on_simulation_done(self, ok: bool, message: str) -> None:
+        self.simulate_stream_btn.setEnabled(True)
+        prefix = "[INFO]" if ok else "[ERROR]"
+        self._append_log(f"{prefix} {message}")
 
     def _update_dancer_preview(self) -> None:
         first = self.dancer_first_name_edit.text().strip()
@@ -1086,10 +1340,7 @@ class RemoteMainWindow(QMainWindow):
             label = session_id or dance_id or "?"
             ts = time.strftime("%H:%M:%S")
             header = f"── SESJA {label}  [{ts}] ──"
-            existing = self.feedback_view.toPlainText().strip()
-            self.feedback_view.setPlainText(
-                f"{header}\n\n{existing}" if existing else header
-            )
+            self.feedback_view.setPlainText(header)
         elif kind == "session_stopped":
             self.session_label.setText("Sesja: -")
             self.client.fetch_analysis_runs()
@@ -1139,6 +1390,9 @@ class RemoteMainWindow(QMainWindow):
         self.analysis_dance_filter.setCurrentIndex(index if index >= 0 else 0)
         self.analysis_dance_filter.blockSignals(False)
         self._refilter_analysis_runs()
+        self._refresh_simulation_run_combo()
+        if self.simulation_source_combo.currentData() == "run":
+            self._simulation_selection_changed()
         self._append_log(f"[INFO] Odebrano liste runow: {len(self._analysis_runs)}")
 
     def _refilter_analysis_runs(self) -> None:

@@ -36,6 +36,10 @@ class SessionStartRequest(BaseModel):
     extra: Dict[str, Any] = Field(default_factory=dict)
 
 
+class SessionPrepareRequest(SessionStartRequest):
+    pass
+
+
 class SetDancerRequest(BaseModel):
     dancer_first_name: str = ""
     dancer_last_name: str = ""
@@ -43,6 +47,11 @@ class SetDancerRequest(BaseModel):
 
 class SessionStopRequest(BaseModel):
     reason: str = "remote_gui"
+
+
+class ReplayRunRequest(BaseModel):
+    run_id: str
+    send_hz: float = 0.0
 
 
 class LiveThresholdsRequest(BaseModel):

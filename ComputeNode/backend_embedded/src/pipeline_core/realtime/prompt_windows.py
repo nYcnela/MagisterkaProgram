@@ -353,13 +353,20 @@ def build_window_record(
             "z_mean_angle": round(float(z_a), 4),
         }
 
-    expected = _best_expected_subsequence(pattern.sequence, observed_sequence)
-    d = _edit_distance(observed_sequence, expected)
-    order_score = _order_score_from_distance(d)
     z_avg = (sum(z_values) / len(z_values)) if z_values else 0.0
-    composite_score = int(round(max(60.0, 100.0 - min(40.0, z_avg * 12.0))))
+    no_sequence_detected = not observed_sequence
+    if no_sequence_detected:
+        order_score = 0
+        composite_score = 0
+    else:
+        expected = _best_expected_subsequence(pattern.sequence, observed_sequence)
+        d = _edit_distance(observed_sequence, expected)
+        order_score = _order_score_from_distance(d)
+        composite_score = int(round(max(60.0, 100.0 - min(40.0, z_avg * 12.0))))
 
     errors_detected: List[str] = []
+    if no_sequence_detected:
+        errors_detected.append("no_sequence_detected")
     issue_threshold = abs(float(error_threshold))
     for key, block in metrics_summary.items():
         for b_key, b_val in block.items():
