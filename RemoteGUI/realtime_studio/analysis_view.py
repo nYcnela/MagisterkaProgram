@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import math
 from pathlib import Path
 from typing import Any
@@ -212,6 +213,24 @@ class AnalysisFigureWidget(QWidget):
                 writer.writerow(row)
         return True
 
+    def export_detailed_csv(self) -> bool:
+        if self._analysis_data is None:
+            return False
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Zapisz szczegolowe dane CSV",
+            "analysis_detailed_data.csv",
+            "CSV (*.csv)",
+        )
+        if not path:
+            return False
+        with Path(path).open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=self._detailed_csv_fieldnames())
+            writer.writeheader()
+            for row in self._detailed_csv_rows(self._analysis_data):
+                writer.writerow(row)
+        return True
+
     _METRIC_CARD_TITLES = {
         "duration_seconds": "Czas trwania ruchow podczas sekwencji",
         "step_length_normalized": "Dlugosc kroku",
@@ -255,7 +274,7 @@ class AnalysisFigureWidget(QWidget):
                         "kind": "metric",
                         "title": self._METRIC_CARD_TITLES.get(key, metric.get("title", "Metryka")),
                         "chart_title": self._METRIC_CHART_TITLES.get(key, key),
-                        "note": self._metric_note(chart_meta),
+                        "note": self._metric_note(chart_meta, metric),
                         "data": metric,
                         "meta": chart_meta,
                     }
@@ -394,12 +413,18 @@ class AnalysisFigureWidget(QWidget):
         ax.tick_params(colors=palette["text"], labelsize=9)
         ax.grid(color=palette["grid"], alpha=0.28, linestyle="--", linewidth=0.6)
 
-    def _metric_note(self, meta: dict[str, Any]) -> str:
+    def _metric_note(self, meta: dict[str, Any], metric: dict[str, Any]) -> str:
         threshold = self._safe_plot_float(meta.get("live_z_threshold"), default=1.0)
         note = "Punkty sa ulozone w kolejnosci zdarzen wykrytych w runie."
         if threshold > 1.0:
             threshold_label = f"{threshold:.2f}".rstrip("0").rstrip(".")
             note += f" Niebieski pas pokazuje avg ± std, zolty pas pokazuje zakres live dla progu z = {threshold_label}."
+        has_missing_value = any(
+            not math.isfinite(self._safe_plot_float(point.get("measured")))
+            for point in metric.get("points", [])
+        )
+        if has_missing_value:
+            note += " Przerwa w linii oznacza brak lub niepoprawna wartosc pomiaru; wykres jej nie interpoluje."
         return note
 
     def _stability_has_missing_note(self, meta: dict[str, Any], group: str) -> bool:
@@ -671,6 +696,28 @@ class AnalysisFigureWidget(QWidget):
             "feedback",
         ]
 
+    def _detailed_csv_fieldnames(self) -> list[str]:
+        return self._csv_fieldnames() + [
+            "window_start",
+            "window_end",
+            "event_time",
+            "value_status",
+            "expected_live_lower",
+            "expected_live_upper",
+            "measured_duration_avg",
+            "expected_duration_avg",
+            "expected_duration_stdev",
+            "observed_sequence",
+            "model_instruction",
+            "model_input",
+            "model_output",
+            "model_score",
+            "latency_s",
+        ]
+
+    def _blank_detailed_csv_row(self) -> dict[str, Any]:
+        return {field: "" for field in self._detailed_csv_fieldnames()}
+
     def _csv_rows(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
         rows: list[dict[str, Any]] = []
         charts = dict(payload.get("charts", {}))
@@ -756,4 +803,120 @@ class AnalysisFigureWidget(QWidget):
                     "feedback": point.get("feedback", ""),
                 }
             )
+        return rows
+
+    def _detailed_csv_rows(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        charts = dict(payload.get("charts", {}))
+        meta = dict(charts.get("meta", {}))
+        live_z_threshold = self._safe_plot_float(meta.get("live_z_threshold"), default=1.0)
+
+        for metric_name, metric in dict(charts.get("event_metrics", {})).items():
+            for point in metric.get("points", []):
+                measured_value = self._safe_plot_float(point.get("measured"))
+                expected_avg = self._safe_plot_float(point.get("expected_avg"))
+                expected_stdev = self._safe_plot_float(point.get("expected_stdev"), default=0.0)
+                live_lower = ""
+                live_upper = ""
+                if math.isfinite(expected_avg) and math.isfinite(expected_stdev):
+                    live_lower = round(expected_avg - expected_stdev * live_z_threshold, 4)
+                    live_upper = round(expected_avg + expected_stdev * live_z_threshold, 4)
+
+                row = self._blank_detailed_csv_row()
+                row.update(
+                    {
+                        "group": "event_metric",
+                        "metric": metric_name,
+                        "label": point.get("x_label", ""),
+                        "index": point.get("index", ""),
+                        "window_index": point.get("window_index", ""),
+                        "event_label": point.get("event_label", ""),
+                        "measured": point.get("measured", ""),
+                        "expected_avg": point.get("expected_avg", ""),
+                        "expected_stdev": point.get("expected_stdev", ""),
+                        "expected_live_lower": live_lower,
+                        "expected_live_upper": live_upper,
+                        "window_start": point.get("window_start", ""),
+                        "window_end": point.get("window_end", ""),
+                        "event_time": point.get("event_time", ""),
+                        "value_status": "ok" if math.isfinite(measured_value) else "missing_or_invalid",
+                    }
+                )
+                rows.append(row)
+
+        for group_name in ["shoulders", "elbows"]:
+            for point in charts.get("stability", {}).get(group_name, []):
+                row = self._blank_detailed_csv_row()
+                row.update(
+                    {
+                        "group": f"stability_{group_name}",
+                        "metric": "angle_avg",
+                        "label": point.get("label", ""),
+                        "measured": point.get("measured_angle_avg", ""),
+                        "expected_avg": point.get("expected_angle_avg", ""),
+                        "expected_stdev": point.get("expected_angle_stdev", ""),
+                        "measured_duration_avg": point.get("measured_duration_avg", ""),
+                        "expected_duration_avg": point.get("expected_duration_avg", ""),
+                        "expected_duration_stdev": point.get("expected_duration_stdev", ""),
+                    }
+                )
+                rows.append(row)
+
+        for group_name in ["unexpected_shoulders", "unexpected_elbows"]:
+            for point in charts.get("stability", {}).get(group_name, []):
+                row = self._blank_detailed_csv_row()
+                row.update(
+                    {
+                        "group": f"stability_{group_name}",
+                        "metric": "angle_avg",
+                        "label": point.get("label", ""),
+                        "measured": point.get("measured_angle_avg", ""),
+                        "measured_duration_avg": point.get("measured_duration_avg", ""),
+                        "detected_period_count": point.get("detected_period_count", ""),
+                    }
+                )
+                rows.append(row)
+
+        for point in charts.get("window_scores", []):
+            observed_sequence = point.get("observed_sequence", [])
+            if isinstance(observed_sequence, list):
+                observed_sequence = json.dumps(observed_sequence, ensure_ascii=False)
+            row = self._blank_detailed_csv_row()
+            row.update(
+                {
+                    "group": "window_score",
+                    "metric": "score",
+                    "label": f"W{point.get('window_index', '')}",
+                    "index": point.get("index", ""),
+                    "window_index": point.get("window_index", ""),
+                    "order_score": point.get("order_score", ""),
+                    "composite_score": point.get("composite_score", ""),
+                    "feedback_score": point.get("feedback_score", ""),
+                    "feedback": point.get("feedback", ""),
+                    "window_start": point.get("window_start", ""),
+                    "window_end": point.get("window_end", ""),
+                    "observed_sequence": observed_sequence,
+                }
+            )
+            rows.append(row)
+
+        for item in charts.get("model_io", []):
+            row = self._blank_detailed_csv_row()
+            row.update(
+                {
+                    "group": "model_io",
+                    "metric": "llm_feedback",
+                    "label": f"W{item.get('window_index', '')}",
+                    "window_index": item.get("window_index", ""),
+                    "window_start": item.get("start_s", ""),
+                    "window_end": item.get("end_s", ""),
+                    "model_instruction": item.get("instruction", ""),
+                    "model_input": item.get("input", ""),
+                    "model_output": item.get("feedback", ""),
+                    "model_score": item.get("score", ""),
+                    "latency_s": item.get("latency_s", ""),
+                }
+            )
+            rows.append(row)
+
         return rows

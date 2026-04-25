@@ -529,12 +529,16 @@ class RemoteMainWindow(QMainWindow):
         self.analysis_export_csv_btn = QPushButton("CSV")
         self.analysis_export_csv_btn.setObjectName("SubtleBtn")
         self.analysis_export_csv_btn.setEnabled(False)
+        self.analysis_export_detailed_csv_btn = QPushButton("Szczegolowe CSV")
+        self.analysis_export_detailed_csv_btn.setObjectName("SubtleBtn")
+        self.analysis_export_detailed_csv_btn.setEnabled(False)
 
         btn_grid.addWidget(self.analysis_generate_btn, 0, 0)
-        btn_grid.addWidget(self.analysis_refresh_btn, 0, 1)
-        btn_grid.addWidget(self.analysis_export_png_btn, 1, 0)
-        btn_grid.addWidget(self.analysis_export_svg_btn, 1, 1)
-        btn_grid.addWidget(self.analysis_export_csv_btn, 1, 2)
+        btn_grid.addWidget(self.analysis_export_png_btn, 0, 1)
+        btn_grid.addWidget(self.analysis_export_svg_btn, 0, 2)
+        btn_grid.addWidget(self.analysis_refresh_btn, 1, 0)
+        btn_grid.addWidget(self.analysis_export_csv_btn, 1, 1)
+        btn_grid.addWidget(self.analysis_export_detailed_csv_btn, 1, 2)
         layout.addLayout(btn_grid)
 
         return self._scroll_page(card)
@@ -858,6 +862,7 @@ class RemoteMainWindow(QMainWindow):
         self.analysis_export_png_btn.clicked.connect(self._export_analysis_png)
         self.analysis_export_svg_btn.clicked.connect(self._export_analysis_svg)
         self.analysis_export_csv_btn.clicked.connect(self._export_analysis_csv)
+        self.analysis_export_detailed_csv_btn.clicked.connect(self._export_analysis_detailed_csv)
         self.analysis_dance_filter.currentIndexChanged.connect(self._refilter_analysis_runs)
         self.analysis_person_filter.textChanged.connect(self._refilter_analysis_runs)
         self.analysis_runs_list.itemSelectionChanged.connect(self._update_analysis_meta)
@@ -1203,6 +1208,7 @@ class RemoteMainWindow(QMainWindow):
         self.analysis_export_png_btn.setEnabled(enabled)
         self.analysis_export_svg_btn.setEnabled(enabled)
         self.analysis_export_csv_btn.setEnabled(payload is not None)
+        self.analysis_export_detailed_csv_btn.setEnabled(payload is not None)
         run_meta = dict(payload.get("run", {})) if isinstance(payload, dict) else {}
         run_id = run_meta.get("run_id", "-")
         self._append_log(f"[INFO] Wygenerowano analize dla runu: {run_id}")
@@ -1218,6 +1224,10 @@ class RemoteMainWindow(QMainWindow):
     def _export_analysis_csv(self) -> None:
         if self.analysis_chart.export_csv():
             self._append_log("[INFO] Zapisano dane CSV z analizy.")
+
+    def _export_analysis_detailed_csv(self) -> None:
+        if self.analysis_chart.export_detailed_csv():
+            self._append_log("[INFO] Zapisano szczegolowe dane CSV z analizy.")
 
     def _analysis_theme_changed(self) -> None:
         theme = _THEME_MAP.get(self.analysis_theme_combo.currentText(), "dark")

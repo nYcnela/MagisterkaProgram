@@ -333,6 +333,52 @@ def _feedback_by_window(run_dir: Path) -> dict[int, dict[str, Any]]:
     return feedback_map
 
 
+def _row_window_index(item: dict[str, Any], fallback: int) -> int:
+    try:
+        return int(item.get("window_index", fallback))
+    except Exception:
+        return fallback
+
+
+def _model_io_rows(run_dir: Path) -> list[dict[str, Any]]:
+    model_inputs = _read_jsonl(run_dir / "model_inputs.jsonl")
+    feedback_rows = _read_jsonl(run_dir / "feedback.jsonl")
+    input_by_window = {
+        _row_window_index(item, index): item
+        for index, item in enumerate(model_inputs)
+    }
+    feedback_by_window = {
+        _row_window_index(item, index): item
+        for index, item in enumerate(feedback_rows)
+    }
+
+    rows: list[dict[str, Any]] = []
+    for window_index in sorted(set(input_by_window) | set(feedback_by_window)):
+        input_item = input_by_window.get(window_index, {})
+        feedback_item = feedback_by_window.get(window_index, {})
+        start_s = feedback_item.get("start_s")
+        if start_s is None:
+            start_s = input_item.get("start_s")
+        end_s = feedback_item.get("end_s")
+        if end_s is None:
+            end_s = input_item.get("end_s")
+        rows.append(
+            {
+                "window_index": window_index,
+                "start_s": start_s,
+                "end_s": end_s,
+                "instruction": feedback_item.get("instruction") or input_item.get("instruction", ""),
+                "input": feedback_item.get("input") or input_item.get("input", ""),
+                "feedback": feedback_item.get("feedback", ""),
+                "score": _safe_score(feedback_item.get("score")),
+                "latency_s": feedback_item.get("latency_s"),
+                "has_model_input": bool(input_item.get("input") or feedback_item.get("input")),
+                "has_model_output": bool(feedback_item.get("feedback")),
+            }
+        )
+    return rows
+
+
 def _resolve_stage7_files(run_dir: Path, sequence_name: str) -> list[Path]:
     analysis_root = run_dir / "analysis" / "stage7"
     if analysis_root.exists():
@@ -720,6 +766,7 @@ def build_run_analysis(cfg: ComputeNodeConfig, run_id: str) -> dict[str, Any]:
                 ),
             },
             "window_scores": window_scores,
+            "model_io": _model_io_rows(run_dir),
         },
     }
     return _json_safe(payload)
