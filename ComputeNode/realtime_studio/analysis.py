@@ -38,6 +38,11 @@ CHANNEL_LABELS = {
     "RElbow_x": "R elbow",
 }
 
+STABILITY_GROUPS = {
+    "shoulders": ["Lshoulder_x", "Rshoulder_x", "Lshoulder_y", "Rshoulder_y"],
+    "elbows": ["LElbow_x", "RElbow_x"],
+}
+
 
 def _load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
@@ -446,33 +451,9 @@ def _channel_points(
 ) -> list[dict[str, Any]]:
     output: list[dict[str, Any]] = []
     for channel_name in channel_names:
-        measured_durations: list[float] = []
-        measured_angles: list[float] = []
-        for stage7_json in stage7_items:
-            measured_periods = stage7_json.get("arm_stability_metrics", {}).get(channel_name)
-            if not isinstance(measured_periods, dict):
-                continue
-            for period in measured_periods.values():
-                if not isinstance(period, dict):
-                    continue
-                try:
-                    duration = float(period.get("duration_seconds"))
-                except Exception:
-                    duration = None  # type: ignore[assignment]
-                angle_range = period.get("angle_range_degrees") if isinstance(period.get("angle_range_degrees"), dict) else {}
-                try:
-                    angle_min = float(angle_range.get("min"))
-                    angle_max = float(angle_range.get("max"))
-                except Exception:
-                    angle_min = None  # type: ignore[assignment]
-                    angle_max = None  # type: ignore[assignment]
-                if duration is not None:
-                    measured_durations.append(duration)
-                if angle_min is not None and angle_max is not None:
-                    measured_angles.append((angle_min + angle_max) / 2.0)
-
+        measured_durations, measured_angles, _period_count = _measured_stability_values(stage7_items, channel_name)
         expected_periods = pattern.arm_stability.get(channel_name)
-        if not isinstance(expected_periods, dict):
+        if not isinstance(expected_periods, dict) or not expected_periods:
             continue
         expected_durations: list[float] = []
         expected_angles: list[float] = []
@@ -512,6 +493,85 @@ def _channel_points(
     return output
 
 
+def _measured_stability_values(stage7_items: list[dict[str, Any]], channel_name: str) -> tuple[list[float], list[float], int]:
+    measured_durations: list[float] = []
+    measured_angles: list[float] = []
+    period_count = 0
+    for stage7_json in stage7_items:
+        measured_periods = stage7_json.get("arm_stability_metrics", {}).get(channel_name)
+        if not isinstance(measured_periods, dict):
+            continue
+        for period in measured_periods.values():
+            if not isinstance(period, dict):
+                continue
+            period_count += 1
+            try:
+                duration = float(period.get("duration_seconds"))
+            except Exception:
+                duration = None  # type: ignore[assignment]
+            angle_range = period.get("angle_range_degrees") if isinstance(period.get("angle_range_degrees"), dict) else {}
+            try:
+                angle_min = float(angle_range.get("min"))
+                angle_max = float(angle_range.get("max"))
+            except Exception:
+                angle_min = None  # type: ignore[assignment]
+                angle_max = None  # type: ignore[assignment]
+            if duration is not None:
+                measured_durations.append(duration)
+            if angle_min is not None and angle_max is not None:
+                measured_angles.append((angle_min + angle_max) / 2.0)
+    return measured_durations, measured_angles, period_count
+
+
+def _unexpected_channel_points(
+    stage7_items: list[dict[str, Any]],
+    pattern: Any,
+    *,
+    channel_names: list[str],
+) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
+    for channel_name in channel_names:
+        expected_periods = pattern.arm_stability.get(channel_name)
+        if isinstance(expected_periods, dict) and expected_periods:
+            continue
+
+        measured_durations, measured_angles, period_count = _measured_stability_values(stage7_items, channel_name)
+        if not measured_durations and not measured_angles:
+            continue
+
+        output.append(
+            {
+                "channel": channel_name,
+                "label": CHANNEL_LABELS.get(channel_name, channel_name),
+                "measured_angle_avg": round(float(_mean(measured_angles)), 4) if measured_angles else None,
+                "measured_duration_avg": round(float(_mean(measured_durations)), 4) if measured_durations else None,
+                "detected_period_count": int(period_count),
+            }
+        )
+    return output
+
+
+def _stability_meta(pattern: Any) -> dict[str, Any]:
+    meta: dict[str, Any] = {}
+    arm_stability = pattern.arm_stability if isinstance(pattern.arm_stability, dict) else {}
+    for group_name, channel_names in STABILITY_GROUPS.items():
+        missing_channels: list[str] = []
+        expected_channels: list[str] = []
+        for channel_name in channel_names:
+            periods = arm_stability.get(channel_name)
+            if isinstance(periods, dict) and periods:
+                expected_channels.append(channel_name)
+            else:
+                missing_channels.append(channel_name)
+
+        meta[group_name] = {
+            "expected_channels": expected_channels,
+            "missing_expected_channels": missing_channels,
+            "no_expected_periods": not expected_channels,
+        }
+    return meta
+
+
 def build_run_analysis(cfg: ComputeNodeConfig, run_id: str) -> dict[str, Any]:
     backend_root, output_root, pattern_root = _analysis_roots(cfg)
     run_dir = _find_run_dir(output_root, run_id)
@@ -541,6 +601,7 @@ def build_run_analysis(cfg: ComputeNodeConfig, run_id: str) -> dict[str, Any]:
     feedback_map = _feedback_by_window(run_dir)
     analysis_meta = _analysis_window_meta(manifest_by_stem, stage7_files)
     analysis_meta.update(live_feedback_settings)
+    stability_meta = _stability_meta(pattern)
 
     event_series: dict[str, list[dict[str, Any]]] = {key: [] for key in EVENT_METRIC_LABELS}
     stage7_items: list[dict[str, Any]] = []
@@ -636,15 +697,26 @@ def build_run_analysis(cfg: ComputeNodeConfig, run_id: str) -> dict[str, Any]:
                 if points
             },
             "stability": {
+                "meta": stability_meta,
                 "shoulders": _channel_points(
                     stage7_items,
                     pattern,
-                    channel_names=["Lshoulder_x", "Rshoulder_x", "Lshoulder_y", "Rshoulder_y"],
+                    channel_names=STABILITY_GROUPS["shoulders"],
                 ),
                 "elbows": _channel_points(
                     stage7_items,
                     pattern,
-                    channel_names=["LElbow_x", "RElbow_x"],
+                    channel_names=STABILITY_GROUPS["elbows"],
+                ),
+                "unexpected_shoulders": _unexpected_channel_points(
+                    stage7_items,
+                    pattern,
+                    channel_names=STABILITY_GROUPS["shoulders"],
+                ),
+                "unexpected_elbows": _unexpected_channel_points(
+                    stage7_items,
+                    pattern,
+                    channel_names=STABILITY_GROUPS["elbows"],
                 ),
             },
             "window_scores": window_scores,

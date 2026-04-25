@@ -33,6 +33,7 @@ THEMES = {
         "pattern_line": "#7dd3fc",
         "threshold_fill": "#facc15",
         "measured_line": "#0ea5e9",
+        "unexpected_fill": "#f97316",
         "feedback_line": "#f59e0b",
         "partial_fill": "#94a3b8",
         "partial_line": "#f97316",
@@ -48,6 +49,7 @@ THEMES = {
         "pattern_line": "#2563eb",
         "threshold_fill": "#facc15",
         "measured_line": "#0f766e",
+        "unexpected_fill": "#ea580c",
         "feedback_line": "#d97706",
         "partial_fill": "#cbd5e1",
         "partial_line": "#ea580c",
@@ -156,6 +158,10 @@ class AnalysisFigureWidget(QWidget):
                 hint.setWordWrap(True)
                 card_layout.addWidget(hint)
 
+            if spec.get("kind") == "message":
+                self._host_layout.addWidget(card)
+                continue
+
             palette = self._palette()
             figure = Figure(figsize=(8.8, 2.8), facecolor=palette["figure_face"])
             canvas = _ScrollFriendlyCanvas(figure)
@@ -226,8 +232,12 @@ class AnalysisFigureWidget(QWidget):
         charts = dict(payload.get("charts", {}))
         chart_meta = dict(charts.get("meta", {}))
         event_metrics = dict(charts.get("event_metrics", {}))
-        shoulders = list(charts.get("stability", {}).get("shoulders", []))
-        elbows = list(charts.get("stability", {}).get("elbows", []))
+        stability = dict(charts.get("stability", {}))
+        stability_meta = dict(stability.get("meta", {}))
+        shoulders = list(stability.get("shoulders", []))
+        elbows = list(stability.get("elbows", []))
+        unexpected_shoulders = list(stability.get("unexpected_shoulders", []))
+        unexpected_elbows = list(stability.get("unexpected_elbows", []))
         window_scores = list(charts.get("window_scores", []))
 
         specs: list[dict[str, Any]] = []
@@ -256,8 +266,27 @@ class AnalysisFigureWidget(QWidget):
                     "kind": "stability_shoulders",
                     "title": "Stabilnosc barkow",
                     "chart_title": "Shoulder stability",
-                    "note": "Porownanie sredniego ustawienia wzgledem wzorca.",
+                    "note": self._stability_note(stability_meta, "shoulders", "barkow"),
                     "data": shoulders,
+                }
+            )
+        elif self._stability_has_missing_note(stability_meta, "shoulders") and not unexpected_shoulders:
+            specs.append(
+                {
+                    "kind": "message",
+                    "title": "Stabilnosc barkow",
+                    "note": self._stability_note(stability_meta, "shoulders", "barkow"),
+                    "data": {},
+                }
+            )
+        if unexpected_shoulders:
+            specs.append(
+                {
+                    "kind": "unexpected_stability",
+                    "title": "Nieoczekiwana stabilnosc barkow",
+                    "chart_title": "Detected stability without reference",
+                    "note": self._unexpected_stability_note("barkow"),
+                    "data": unexpected_shoulders,
                 }
             )
         if elbows:
@@ -266,8 +295,27 @@ class AnalysisFigureWidget(QWidget):
                     "kind": "stability_elbows",
                     "title": "Stabilnosc lokci",
                     "chart_title": "Elbow stability",
-                    "note": "Porownanie sredniego ustawienia wzgledem wzorca.",
+                    "note": self._stability_note(stability_meta, "elbows", "lokci"),
                     "data": elbows,
+                }
+            )
+        elif self._stability_has_missing_note(stability_meta, "elbows") and not unexpected_elbows:
+            specs.append(
+                {
+                    "kind": "message",
+                    "title": "Stabilnosc lokci",
+                    "note": self._stability_note(stability_meta, "elbows", "lokci"),
+                    "data": {},
+                }
+            )
+        if unexpected_elbows:
+            specs.append(
+                {
+                    "kind": "unexpected_stability",
+                    "title": "Nieoczekiwana stabilnosc lokci",
+                    "chart_title": "Detected stability without reference",
+                    "note": self._unexpected_stability_note("lokci"),
+                    "data": unexpected_elbows,
                 }
             )
         if window_scores:
@@ -331,6 +379,10 @@ class AnalysisFigureWidget(QWidget):
             self._plot_stability(ax, spec["data"], chart_title)
         elif kind == "stability_elbows":
             self._plot_stability(ax, spec["data"], chart_title)
+        elif kind == "unexpected_stability":
+            self._plot_unexpected_stability(ax, spec["data"], chart_title)
+        elif kind == "message":
+            self._plot_message(ax, spec.get("note") or "")
         else:
             self._plot_window_scores(ax, spec["data"], chart_title, spec.get("meta", {}))
 
@@ -349,6 +401,42 @@ class AnalysisFigureWidget(QWidget):
             threshold_label = f"{threshold:.2f}".rstrip("0").rstrip(".")
             note += f" Niebieski pas pokazuje avg ± std, zolty pas pokazuje zakres live dla progu z = {threshold_label}."
         return note
+
+    def _stability_has_missing_note(self, meta: dict[str, Any], group: str) -> bool:
+        group_meta = meta.get(group)
+        if not isinstance(group_meta, dict):
+            return False
+        return bool(group_meta.get("missing_expected_channels"))
+
+    def _stability_note(self, meta: dict[str, Any], group: str, label: str) -> str:
+        base = "Porownanie sredniego ustawienia wzgledem wzorca."
+        group_meta = meta.get(group)
+        if not isinstance(group_meta, dict):
+            return base
+
+        missing = [
+            self._LABEL_PL_TO_EN.get(str(channel), str(channel))
+            for channel in group_meta.get("missing_expected_channels", [])
+        ]
+        if not missing:
+            return base
+        missing_text = ", ".join(missing)
+        if group_meta.get("no_expected_periods"):
+            return (
+                f"Dla tej sekwencji we wzorcach nie wystepowaly okresy stabilnosci {label}; "
+                "dlatego wykres stabilnosci dla tej grupy nie jest oceniany."
+            )
+        return (
+            f"{base} Dla tej sekwencji we wzorcach nie wystepowaly okresy stabilnosci "
+            f"dla kanalow: {missing_text}."
+        )
+
+    def _unexpected_stability_note(self, label: str) -> str:
+        return (
+            f"We wzorcu dla tej sekwencji nie wystepowaly okresy stabilnosci {label}, "
+            "ale zostaly wykryte u uzytkownika. Traktuj to jako potencjalnie nadmiarowa stabilnosc, "
+            "bez porownania do referencji."
+        )
 
     def _plot_metric(self, ax, metric: dict[str, Any], title: str, meta: dict[str, Any]) -> None:
         palette = self._palette()
@@ -392,6 +480,12 @@ class AnalysisFigureWidget(QWidget):
         "Prawy bark Y": "R shoulder Y",
         "Lewy łokieć": "L elbow",
         "Prawy łokieć": "R elbow",
+        "Lshoulder_x": "L shoulder X",
+        "Rshoulder_x": "R shoulder X",
+        "Lshoulder_y": "L shoulder Y",
+        "Rshoulder_y": "R shoulder Y",
+        "LElbow_x": "L elbow",
+        "RElbow_x": "R elbow",
     }
 
     def _plot_stability(self, ax, points: list[dict[str, Any]], title: str) -> None:
@@ -413,6 +507,54 @@ class AnalysisFigureWidget(QWidget):
         ax.set_xticks(x)
         ax.set_xticklabels(labels, rotation=0, ha="center", color=palette["text"])
         self._legend_below(ax, ["Reference pattern", "Measured"], palette)
+
+    def _plot_unexpected_stability(self, ax, points: list[dict[str, Any]], title: str) -> None:
+        palette = self._palette()
+        labels = [self._LABEL_PL_TO_EN.get(str(point.get("label") or ""), str(point.get("label") or "")) for point in points]
+        x = list(range(len(points)))
+        angle_values = [self._safe_plot_float(point.get("measured_angle_avg")) for point in points]
+        duration_values = [self._safe_plot_float(point.get("measured_duration_avg")) for point in points]
+        use_angles = any(math.isfinite(value) for value in angle_values)
+        values = angle_values if use_angles else duration_values
+        ylabel = "deg" if use_angles else "s"
+
+        ax.bar(x, values, width=0.52, color=palette["unexpected_fill"], alpha=0.88, label="Detected, not expected")
+        for xpos, value, point in zip(x, values, points):
+            if not math.isfinite(value):
+                continue
+            count = point.get("detected_period_count")
+            if isinstance(count, int) and count > 0:
+                ax.text(
+                    xpos,
+                    value,
+                    f"n={count}",
+                    color=palette["text"],
+                    fontsize=8,
+                    ha="center",
+                    va="bottom",
+                )
+
+        if title:
+            ax.set_title(title, loc="left", fontsize=11, fontweight="bold", color=palette["title"])
+        ax.set_ylabel(ylabel, color=palette["text"])
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels, rotation=0, ha="center", color=palette["text"])
+        self._legend_below(ax, None, palette, handles=ax.get_legend_handles_labels()[0])
+
+    def _plot_message(self, ax, text: str) -> None:
+        palette = self._palette()
+        ax.set_axis_off()
+        ax.text(
+            0.02,
+            0.72,
+            text,
+            color=palette["text"],
+            fontsize=10,
+            ha="left",
+            va="top",
+            wrap=True,
+            transform=ax.transAxes,
+        )
 
     def _plot_window_scores(self, ax, points: list[dict[str, Any]], title: str, meta: dict[str, Any]) -> None:
         palette = self._palette()
@@ -522,6 +664,7 @@ class AnalysisFigureWidget(QWidget):
             "measured",
             "expected_avg",
             "expected_stdev",
+            "detected_period_count",
             "order_score",
             "composite_score",
             "feedback_score",
@@ -544,6 +687,7 @@ class AnalysisFigureWidget(QWidget):
                         "measured": point.get("measured", ""),
                         "expected_avg": point.get("expected_avg", ""),
                         "expected_stdev": point.get("expected_stdev", ""),
+                        "detected_period_count": "",
                         "order_score": "",
                         "composite_score": "",
                         "feedback_score": "",
@@ -564,6 +708,28 @@ class AnalysisFigureWidget(QWidget):
                         "measured": point.get("measured_angle_avg", ""),
                         "expected_avg": point.get("expected_angle_avg", ""),
                         "expected_stdev": point.get("expected_angle_stdev", ""),
+                        "detected_period_count": "",
+                        "order_score": "",
+                        "composite_score": "",
+                        "feedback_score": "",
+                        "feedback": "",
+                    }
+                )
+
+        for group_name in ["unexpected_shoulders", "unexpected_elbows"]:
+            for point in charts.get("stability", {}).get(group_name, []):
+                rows.append(
+                    {
+                        "group": f"stability_{group_name}",
+                        "metric": "angle_avg",
+                        "label": point.get("label", ""),
+                        "index": "",
+                        "window_index": "",
+                        "event_label": "",
+                        "measured": point.get("measured_angle_avg", ""),
+                        "expected_avg": "",
+                        "expected_stdev": "",
+                        "detected_period_count": point.get("detected_period_count", ""),
                         "order_score": "",
                         "composite_score": "",
                         "feedback_score": "",
@@ -583,6 +749,7 @@ class AnalysisFigureWidget(QWidget):
                     "measured": "",
                     "expected_avg": "",
                     "expected_stdev": "",
+                    "detected_period_count": "",
                     "order_score": point.get("order_score", ""),
                     "composite_score": point.get("composite_score", ""),
                     "feedback_score": point.get("feedback_score", ""),
