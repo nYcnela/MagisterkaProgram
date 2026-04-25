@@ -111,6 +111,7 @@ class ComputeNodeManager:
         if cfg.vr_feedback_enabled:
             self._vr_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._session_scores: list[float] = []
+        self._summary_sent = False
 
         self._health_thread = threading.Thread(target=self._health_loop, name="llm-health", daemon=True)
         self._health_thread.start()
@@ -155,11 +156,18 @@ class ComputeNodeManager:
 
     def _send_vr_summary(self) -> None:
         with self._lock:
+            if self._summary_sent:
+                return
             scores = list(self._session_scores)
         if not scores:
             return
         avg = round(sum(scores) / len(scores), 2)
-        self._append_log("node", f"Session summary: {len(scores)} feedback(s), avg score={avg}")
+        text = f"Session summary: {len(scores)} feedback(s), avg score={avg}"
+        with self._lock:
+            self._summary_sent = True
+            self.snapshot.last_feedback = text
+        self._append_log("node", text)
+        self._publish("session_summary", {"feedback_count": len(scores), "avg_score": avg, "text": text})
         self._send_vr_packet({"type": "summary", "text": str(avg)})
 
     def _send_vr_packet(self, payload: dict) -> None:
@@ -182,14 +190,20 @@ class ComputeNodeManager:
     def _consume_backend_line(self, line: str) -> None:
         if line.startswith("[CONTROL] PREP session_id="):
             kv = self._parse_control_kv(line, "[CONTROL] PREP ")
+            session_id = kv.get("session_id", "")
             run_id = kv.get("run_id", "")
             dance_id = kv.get("dance_id", "")
             with self._lock:
+                self.snapshot.last_feedback = ""
+                self.snapshot.session_id = session_id
+                self.snapshot.session_active = False
                 if run_id:
                     self.snapshot.run_id = run_id
                 if dance_id:
                     self.snapshot.dance_id = dance_id
-            self._publish("session_prepared", {"run_id": run_id, "dance_id": dance_id})
+                self._session_scores.clear()
+                self._summary_sent = False
+            self._publish("session_prepared", {"session_id": session_id, "run_id": run_id, "dance_id": dance_id})
 
         elif line.startswith("[CONTROL] session_id="):
             kv = self._parse_control_kv(line, "[CONTROL] ")
@@ -205,17 +219,24 @@ class ComputeNodeManager:
                     self.snapshot.run_id = run_id
             with self._lock:
                 self._session_scores.clear()
+                self._summary_sent = False
             self._publish(
                 "session_started",
                 {"session_id": session_id, "dance_id": dance_id, "run_id": run_id},
             )
 
         elif line.startswith("[CONTROL] STOP session_id="):
-            self._send_vr_summary()
             with self._lock:
                 self.snapshot.session_active = False
                 self.snapshot.session_id = ""
             self._publish("session_stopped", {"reason": line})
+
+        elif line.startswith("[RX ] [DONE] E2E summary:"):
+            self._send_vr_summary()
+
+        elif line.startswith("[CONTROL] receiver_exit_code="):
+            # Fallback for interrupted runs where the child does not print the DONE line.
+            threading.Timer(0.4, self._send_vr_summary).start()
 
     def _studio_cfg(self) -> StudioConfig:
         return StudioConfig(
@@ -435,6 +456,15 @@ class ComputeNodeManager:
         if req.run_id.strip():
             payload["run_id"] = req.run_id.strip()
         payload.update(req.extra)
+        with self._lock:
+            self.snapshot.last_feedback = ""
+            self.snapshot.session_active = False
+            self.snapshot.session_id = session_id
+            self.snapshot.dance_id = req.dance_id
+            if payload.get("run_id"):
+                self.snapshot.run_id = str(payload["run_id"])
+            self._session_scores.clear()
+            self._summary_sent = False
         self._send_control_packet(payload)
         self._append_log("node", f"Sent session_prepare for {session_id}")
         return payload

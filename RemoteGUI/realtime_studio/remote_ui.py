@@ -1190,6 +1190,7 @@ class RemoteMainWindow(QMainWindow):
             if not run_id:
                 self._append_error("Nie wybrano runu ComputeNode do symulacji.")
                 return
+            self.simulate_stream_btn.setEnabled(False)
             self.client.replay_run({"run_id": run_id, "send_hz": 0.0})
             self._append_log(f"[INFO] Zlecono ComputeNode ponowna symulacje runu: {run_id}")
             return
@@ -1229,6 +1230,7 @@ class RemoteMainWindow(QMainWindow):
 
     def _stop_session_clicked(self) -> None:
         self._simulation_stop.set()
+        self.simulate_stream_btn.setEnabled(True)
         self.session_label.setText("Sesja: (stopping...)")
         self.client.stop_session({"reason": "remote_gui"})
 
@@ -1236,6 +1238,14 @@ class RemoteMainWindow(QMainWindow):
         self.simulate_stream_btn.setEnabled(True)
         prefix = "[INFO]" if ok else "[ERROR]"
         self._append_log(f"{prefix} {message}")
+        if ok:
+            self._append_log("[INFO] Symulacja zakonczona, wysylam session_end.")
+            QTimer.singleShot(500, self._stop_after_simulation_finished)
+
+    def _stop_after_simulation_finished(self) -> None:
+        self._simulation_stop.set()
+        self.session_label.setText("Sesja: (stopping...)")
+        self.client.stop_session({"reason": "simulation_finished"})
 
     def _update_dancer_preview(self) -> None:
         first = self.dancer_first_name_edit.text().strip()
@@ -1297,6 +1307,38 @@ class RemoteMainWindow(QMainWindow):
         self._apply_snapshot_like(snapshot)
         self._append_log("[INFO] Odebrano snapshot stanu z ComputeNode.")
 
+    def _prepend_feedback_block(self, title: str, text: str) -> None:
+        existing = self.feedback_view.toPlainText().strip()
+        block = f"{title}\n{text}" if text else title
+        if existing:
+            self.feedback_view.setPlainText(f"{block}\n\n{existing}")
+        else:
+            self.feedback_view.setPlainText(block)
+        sb = self.feedback_view.verticalScrollBar()
+        sb.setValue(sb.minimum())
+
+    def _show_prepared_session(self, payload: dict) -> None:
+        session_id = str(payload.get("session_id") or "").strip()
+        dance_id = str(payload.get("dance_id") or "").strip()
+        run_id = str(payload.get("run_id") or "").strip()
+        if run_id:
+            self.run_id_label.setText(f"Run: {run_id}")
+        self.session_label.setText(f"Sesja: {session_id or '-'} / {dance_id or '-'} (prepare)")
+        label = session_id or dance_id or "?"
+        ts = time.strftime("%H:%M:%S")
+        self.feedback_view.setPlainText(f"── PRZYGOTOWANO SESJE {label}  [{ts}] ──")
+
+    def _show_started_session(self, payload: dict) -> None:
+        session_id = str(payload.get("session_id") or "").strip()
+        dance_id = str(payload.get("dance_id") or "").strip()
+        run_id = str(payload.get("run_id") or "").strip()
+        self.session_label.setText(f"Sesja: {session_id or '-'} / {dance_id or '-'}")
+        if run_id:
+            self.run_id_label.setText(f"Run: {run_id}")
+        label = session_id or dance_id or "?"
+        ts = time.strftime("%H:%M:%S")
+        self.feedback_view.setPlainText(f"── SESJA {label}  [{ts}] ──")
+
     def _apply_event(self, event: dict) -> None:
         kind = str(event.get("type", ""))
         payload = dict(event.get("payload", {}))
@@ -1324,26 +1366,29 @@ class RemoteMainWindow(QMainWindow):
         elif kind == "llm_state":
             self._set_pill(self.llm_state_dot, self.llm_state_text, payload.get("state", "STOPPED"), payload.get("details", ""))
         elif kind == "session_prepared":
-            run_id = payload.get("run_id", "")
-            dance_id = payload.get("dance_id", "")
-            if run_id:
-                self.run_id_label.setText(f"Run: {run_id}")
-            if dance_id:
-                self.session_label.setText(f"Sesja: (prepare) / {dance_id}")
+            self._show_prepared_session(payload)
         elif kind == "session_started":
-            session_id = payload.get("session_id", "")
-            dance_id = payload.get("dance_id", "")
-            run_id = payload.get("run_id", "")
-            self.session_label.setText(f"Sesja: {session_id or '-'} / {dance_id or '-'}")
-            if run_id:
-                self.run_id_label.setText(f"Run: {run_id}")
-            label = session_id or dance_id or "?"
-            ts = time.strftime("%H:%M:%S")
-            header = f"── SESJA {label}  [{ts}] ──"
-            self.feedback_view.setPlainText(header)
+            self._show_started_session(payload)
         elif kind == "session_stopped":
             self.session_label.setText("Sesja: -")
             self.client.fetch_analysis_runs()
+        elif kind == "session_summary":
+            text = str(payload.get("text") or "").strip()
+            if not text:
+                text = (
+                    f"Session summary: {payload.get('feedback_count', 0)} feedback(s), "
+                    f"avg score={payload.get('avg_score', '-')}"
+                )
+            ts = time.strftime("%H:%M:%S")
+            self._prepend_feedback_block(f"── PODSUMOWANIE SESJI  [{ts}] ──", text)
+            self.client.fetch_analysis_runs()
+        elif kind == "simulation_replay_finished":
+            self.simulate_stream_btn.setEnabled(True)
+            self._append_log("[INFO] Symulacja runu zakonczona, wysylam session_end.")
+            QTimer.singleShot(500, self._stop_after_simulation_finished)
+        elif kind == "simulation_replay_failed":
+            self.simulate_stream_btn.setEnabled(True)
+            self._append_error(f"Symulacja runu nie powiodla sie: {payload.get('error', '')}")
         elif kind == "live_thresholds_updated":
             self._append_log(
                 "[INFO] ComputeNode przyjal progi live: "
@@ -1351,7 +1396,13 @@ class RemoteMainWindow(QMainWindow):
             )
 
     def _on_response(self, tag: str, payload: dict) -> None:
-        if "snapshot" in payload:
+        if tag == "session_prepare":
+            self._show_prepared_session(dict(payload.get("sent") or {}))
+        elif tag == "session_start":
+            self._show_started_session(dict(payload.get("sent") or {}))
+        elif tag in {"session_stop", "simulation_replay_run"}:
+            pass
+        elif "snapshot" in payload:
             self._apply_snapshot_like(payload["snapshot"])
         elif "backend" in payload or "llm" in payload:
             self._apply_snapshot_like(payload)
