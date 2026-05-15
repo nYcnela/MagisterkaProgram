@@ -48,6 +48,7 @@ class StudioConfig:
     live_z_threshold: float = 1.7
     live_major_order_threshold: int = 60
     live_emit_minor_order_text: bool = False
+    no_sequence_feedback_start_dancing: int = 2
 
     output_root: str = "../runtime/realtime_e2e"
 

@@ -48,6 +48,7 @@ class RuntimeDefaults:
     live_z_threshold: float
     live_major_order_threshold: int
     live_emit_minor_order_text: bool
+    no_sequence_feedback_start_dancing: int
     step_type: str
     sequence_name: str
 
@@ -148,6 +149,13 @@ class SessionRunner:
         live_emit_minor_order_text = bool(
             control_payload.get("live_emit_minor_order_text", defaults.live_emit_minor_order_text)
         )
+        no_sequence_feedback_start_dancing = int(
+            control_payload.get(
+                "no_sequence_feedback_start_dancing",
+                defaults.no_sequence_feedback_start_dancing,
+            )
+        )
+        control_payload["no_sequence_feedback_start_dancing"] = no_sequence_feedback_start_dancing
 
         dancer_dir = _dancer_subdir(
             str(control_payload.get("dancer_first_name") or ""),
@@ -192,6 +200,8 @@ class SessionRunner:
             str(live_z_threshold),
             "--live-major-order-threshold",
             str(live_major_order_threshold),
+            "--no-sequence-feedback-start-dancing",
+            str(no_sequence_feedback_start_dancing),
         ]
 
         if live_emit_minor_order_text:
@@ -469,6 +479,12 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--live-z-threshold", type=float, default=1.7)
     ap.add_argument("--live-major-order-threshold", type=int, default=60)
     ap.add_argument("--live-emit-minor-order-text", action="store_true")
+    ap.add_argument(
+        "--no-sequence-feedback-start-dancing",
+        type=int,
+        default=2,
+        help="Consecutive no-sequence windows required before emitting rule-based 'Start dancing' feedback.",
+    )
 
     return ap.parse_args()
 
@@ -491,6 +507,7 @@ def main() -> int:
         live_z_threshold=args.live_z_threshold,
         live_major_order_threshold=args.live_major_order_threshold,
         live_emit_minor_order_text=args.live_emit_minor_order_text,
+        no_sequence_feedback_start_dancing=args.no_sequence_feedback_start_dancing,
         step_type=args.step_type,
         sequence_name=args.sequence_name,
     )

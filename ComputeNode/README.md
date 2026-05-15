@@ -55,9 +55,10 @@ Pola które zwykle się zmienia:
 | `udp_control_port` | gdzie backend słucha sterowania sesją (domyślnie `5006`) |
 | `llm_host`, `llm_port` | lokalny endpoint LLM (zawsze `127.0.0.1:8000`) |
 | `llm_adapter_dir`, `llm_use_4bit` | katalog adaptera QLoRA + kwantyzacja 4-bit NF4 (działa tylko na CUDA; na MPS/CPU leci pełna precyzja z samym LoRA na wierzchu) |
-| `input_hz`, `window_seconds`, `stride_seconds` | parametry okna analizy (100 Hz, 4 s okno co 3 s) |
+| `input_hz`, `window_seconds`, `stride_seconds` | parametry okna analizy (100 Hz, 3 s okno co 2 s) |
 | `dance_id`, `sequence_name`, `gender` | kontekst sesji (`step_type` wyliczane automatycznie z `dance_id`) |
 | `live_z_threshold`, `live_major_order_threshold` | progi detekcji live (kiedy wołać LLM) |
+| `no_sequence_feedback_start_dancing` | liczba kolejnych pustych okien przed regułowym `Start dancing` |
 | `output_root` | gdzie zapisują się runy (`../runtime/realtime_e2e/<data>/<run_id>/`) |
 | `vr_feedback_enabled`, `vr_feedback_host`, `vr_feedback_port` | wysyłka UDP z feedbackiem LLM do headsetu/klienta VR |
 

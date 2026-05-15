@@ -192,6 +192,8 @@ def build_backend_command(cfg: StudioConfig, run_id: str | None = None) -> tuple
             str(cfg.live_z_threshold),
             "--live-major-order-threshold",
             str(cfg.live_major_order_threshold),
+            "--no-sequence-feedback-start-dancing",
+            str(cfg.no_sequence_feedback_start_dancing),
         ]
         if cfg.live_emit_minor_order_text:
             args.append("--live-emit-minor-order-text")
@@ -239,6 +241,8 @@ def build_backend_command(cfg: StudioConfig, run_id: str | None = None) -> tuple
             str(cfg.live_z_threshold),
             "--live-major-order-threshold",
             str(cfg.live_major_order_threshold),
+            "--no-sequence-feedback-start-dancing",
+            str(cfg.no_sequence_feedback_start_dancing),
         ]
         if cfg.live_emit_minor_order_text:
             args.append("--live-emit-minor-order-text")
@@ -277,4 +281,3 @@ def build_llm_command(cfg: StudioConfig) -> tuple[str, list[str], Path]:
 
     program = cfg.python_exec.strip() or sys.executable
     return program, args, backend_root
-

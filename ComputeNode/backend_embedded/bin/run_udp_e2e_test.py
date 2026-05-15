@@ -586,6 +586,12 @@ def main() -> int:
         help="Emit 'minor deviations' order text in live mode.",
     )
     ap.add_argument(
+        "--no-sequence-feedback-start-dancing",
+        type=int,
+        default=2,
+        help="Consecutive no-sequence windows required before emitting rule-based 'Start dancing' feedback.",
+    )
+    ap.add_argument(
         "--model-inputs-path",
         type=Path,
         default=None,
@@ -672,6 +678,7 @@ def main() -> int:
     live_state: Dict[str, Any] = {
         "processed": 0,
         "failed": 0,
+        "no_sequence_streak": 0,
         "processing_s": [],
         "latency_s": [],
         "stage_sums": {},
@@ -748,10 +755,20 @@ def main() -> int:
 
                     # optional: call LLM server and save feedback
                     if args.llm_url and feedback_path is not None:
-                        if not list(window_record.get("current_sequence") or []):
-                            fb = _no_sequence_feedback()
-                        else:
+                        has_sequence = bool(list(window_record.get("current_sequence") or []))
+                        no_sequence_threshold = max(1, int(args.no_sequence_feedback_start_dancing))
+                        if has_sequence:
+                            with live_state_lock:
+                                live_state["no_sequence_streak"] = 0
                             fb = _call_llm_server(args.llm_url, rec)
+                        else:
+                            with live_state_lock:
+                                live_state["no_sequence_streak"] = int(live_state["no_sequence_streak"]) + 1
+                                no_sequence_streak = int(live_state["no_sequence_streak"])
+                            if no_sequence_streak >= no_sequence_threshold:
+                                fb = _no_sequence_feedback()
+                            else:
+                                fb = None
                         if fb is not None:
                             fb_rec = {
                                 "window_index": manifest.get("window_index"),
@@ -916,6 +933,7 @@ def main() -> int:
             "live_z_threshold": float(args.live_z_threshold),
             "live_major_order_threshold": int(args.live_major_order_threshold),
             "live_emit_minor_order_text": bool(args.live_emit_minor_order_text),
+            "no_sequence_feedback_start_dancing": int(args.no_sequence_feedback_start_dancing),
             "model_inputs_path": str(model_inputs_path.resolve()) if model_inputs_path else None,
             "llm_url": args.llm_url,
             "feedback_path": str(feedback_path.resolve()) if (args.llm_url and feedback_path is not None) else None,

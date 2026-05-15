@@ -25,6 +25,7 @@
   "live_z_threshold": 1.7,
   "live_major_order_threshold": 60,
   "live_emit_minor_order_text": false,
+  "no_sequence_feedback_start_dancing": 2,
   "output_root": "../runtime/realtime_e2e",
   "session_mode": true,
   "auto_control_port": true,

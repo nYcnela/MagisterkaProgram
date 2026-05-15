@@ -263,6 +263,7 @@ class ComputeNodeManager:
             live_z_threshold=self.cfg.live_z_threshold,
             live_major_order_threshold=self.cfg.live_major_order_threshold,
             live_emit_minor_order_text=self.cfg.live_emit_minor_order_text,
+            no_sequence_feedback_start_dancing=self.cfg.no_sequence_feedback_start_dancing,
             output_root=self.cfg.output_root,
             auto_control_port=self.cfg.auto_control_port,
             auto_detect_dance=self.cfg.auto_detect_dance,

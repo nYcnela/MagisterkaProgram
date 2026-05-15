@@ -277,11 +277,22 @@ def _live_feedback_settings(session_meta: dict[str, Any], cfg: ComputeNodeConfig
         )
     except Exception:
         session_live_major_order_threshold = int(cfg.live_major_order_threshold)
+    try:
+        session_no_sequence_feedback_start_dancing = int(
+            control_payload.get(
+                "no_sequence_feedback_start_dancing",
+                cfg.no_sequence_feedback_start_dancing,
+            )
+        )
+    except Exception:
+        session_no_sequence_feedback_start_dancing = int(cfg.no_sequence_feedback_start_dancing)
     return {
         "live_z_threshold": round(float(cfg.live_z_threshold), 4),
         "live_major_order_threshold": int(cfg.live_major_order_threshold),
+        "no_sequence_feedback_start_dancing": int(cfg.no_sequence_feedback_start_dancing),
         "session_live_z_threshold": round(session_live_z_threshold, 4),
         "session_live_major_order_threshold": session_live_major_order_threshold,
+        "session_no_sequence_feedback_start_dancing": session_no_sequence_feedback_start_dancing,
     }
 
 
