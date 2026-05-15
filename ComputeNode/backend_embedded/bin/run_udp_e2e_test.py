@@ -5,6 +5,7 @@ import argparse
 import io
 import importlib.util
 import json
+import math
 import queue
 import subprocess
 import sys
@@ -46,6 +47,19 @@ MODEL_INSTRUCTION = (
 LIVE_DESC_Z_THRESHOLD = 1.5
 LIVE_MAJOR_ORDER_THRESHOLD = 60
 LIVE_EMIT_MINOR_ORDER_TEXT = False
+LIVE_MOTION_ACTIVE_MM_PER_FRAME = 0.5
+MOTION_MARKERS = (
+    "LASI",
+    "RASI",
+    "LPSI",
+    "RPSI",
+    "LKNE",
+    "RKNE",
+    "LANK",
+    "RANK",
+    "LTOE",
+    "RTOE",
+)
 
 
 def _tail(text: str, max_chars: int = 1800) -> str:
@@ -201,6 +215,22 @@ def _no_sequence_feedback() -> Dict[str, Any]:
     }
 
 
+def _active_incomplete_sequence_input() -> Dict[str, str]:
+    return {
+        "instruction": MODEL_INSTRUCTION,
+        "input": "Movement is continuing, but no complete dance segment was available in this window.",
+    }
+
+
+def _active_incomplete_sequence_feedback() -> Dict[str, Any]:
+    return {
+        "feedback": "Continue dancing. Score: 3",
+        "score": 3,
+        "latency_s": 0.0,
+        "source": "rule:active_incomplete_sequence",
+    }
+
+
 def _has_sequence_like_events(stage7_data: Dict[str, Any]) -> bool:
     for ev in stage7_data.get("events") or []:
         if not isinstance(ev, dict):
@@ -214,6 +244,66 @@ def _has_sequence_like_events(stage7_data: Dict[str, Any]) -> bool:
         if _normalize_event_base_to_pattern_key(base):
             return True
     return False
+
+
+def _safe_csv_float(value: str) -> float | None:
+    try:
+        out = float(value.strip())
+    except Exception:
+        return None
+    if not math.isfinite(out):
+        return None
+    return out
+
+
+def _motion_activity_mm_per_frame(csv_path: Path) -> float:
+    try:
+        lines = csv_path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return 0.0
+    if len(lines) < 6:
+        return 0.0
+
+    delimiter = ";" if ";" in lines[2] else ","
+    marker_cells = lines[2].split(delimiter)[2:]
+    marker_names = [marker_cells[i].strip() for i in range(0, len(marker_cells), 3)]
+    marker_indices = [marker_names.index(name) for name in MOTION_MARKERS if name in marker_names]
+    if not marker_indices:
+        return 0.0
+
+    prev: dict[int, tuple[float, float, float]] = {}
+    displacements: list[float] = []
+    for line in lines[5:]:
+        if not line.strip():
+            break
+        parts = line.split(delimiter)
+        current: dict[int, tuple[float, float, float]] = {}
+        for marker_index in marker_indices:
+            offset = 2 + 3 * marker_index
+            if offset + 2 >= len(parts):
+                continue
+            x = _safe_csv_float(parts[offset])
+            y = _safe_csv_float(parts[offset + 1])
+            z = _safe_csv_float(parts[offset + 2])
+            if x is None or y is None or z is None:
+                continue
+            current[marker_index] = (x, y, z)
+
+        if prev:
+            frame_displacements = [
+                math.dist(xyz, prev[marker_index])
+                for marker_index, xyz in current.items()
+                if marker_index in prev
+            ]
+            if frame_displacements:
+                frame_displacements.sort()
+                displacements.append(frame_displacements[len(frame_displacements) // 2])
+        prev = current
+
+    if not displacements:
+        return 0.0
+    displacements.sort()
+    return float(displacements[len(displacements) // 2])
 
 
 def _model_input_from_stage7_file(
@@ -756,6 +846,13 @@ def main() -> int:
                         major_order_threshold=int(args.live_major_order_threshold),
                         emit_minor_order_text=bool(args.live_emit_minor_order_text),
                     )
+                    has_sequence = bool(list(window_record.get("current_sequence") or []))
+                    has_sequence_like_events = _has_sequence_like_events(stage7_data)
+                    motion_activity = _motion_activity_mm_per_frame(src_csv)
+                    is_moving = has_sequence_like_events or motion_activity >= LIVE_MOTION_ACTIVE_MM_PER_FRAME
+                    if not has_sequence and is_moving:
+                        rec = _active_incomplete_sequence_input()
+
                     analysis_stage7_path = analysis_stage7_root / f"{stem}.json"
                     analysis_window_path = analysis_window_records_root / f"{stem}.json"
                     analysis_stage7_path.write_text(
@@ -772,17 +869,15 @@ def main() -> int:
 
                     # optional: call LLM server and save feedback
                     if args.llm_url and feedback_path is not None:
-                        has_sequence = bool(list(window_record.get("current_sequence") or []))
-                        has_sequence_like_events = _has_sequence_like_events(stage7_data)
                         no_sequence_threshold = max(1, int(args.no_sequence_feedback_start_dancing))
                         if has_sequence:
                             with live_state_lock:
                                 live_state["no_sequence_streak"] = 0
                             fb = _call_llm_server(args.llm_url, rec)
-                        elif not has_sequence_like_events:
+                        elif is_moving:
                             with live_state_lock:
                                 live_state["no_sequence_streak"] = 0
-                            fb = _no_sequence_feedback()
+                            fb = _active_incomplete_sequence_feedback()
                         else:
                             with live_state_lock:
                                 live_state["no_sequence_streak"] = int(live_state["no_sequence_streak"]) + 1
@@ -792,7 +887,7 @@ def main() -> int:
                             else:
                                 fb = None
                                 print(
-                                    f"[LIVE] no complete sequence yet "
+                                    f"[LIVE] no motion detected "
                                     f"(streak={no_sequence_streak}/{no_sequence_threshold}); waiting"
                                 )
                         if fb is not None:
