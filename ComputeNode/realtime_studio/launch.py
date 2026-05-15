@@ -136,6 +136,13 @@ def resolve_under_root(path_like: str, root: Path) -> Path:
     return (root / path).resolve()
 
 
+def _script_supports_arg(script: Path, arg_name: str) -> bool:
+    try:
+        return arg_name in script.read_text(encoding="utf-8")
+    except Exception:
+        return False
+
+
 def extract_feedback_text(line: str) -> str | None:
     marker = "[FEEDBACK]"
     if marker not in line:
@@ -192,9 +199,12 @@ def build_backend_command(cfg: StudioConfig, run_id: str | None = None) -> tuple
             str(cfg.live_z_threshold),
             "--live-major-order-threshold",
             str(cfg.live_major_order_threshold),
-            "--no-sequence-feedback-start-dancing",
-            str(cfg.no_sequence_feedback_start_dancing),
         ]
+        if _script_supports_arg(script, "--no-sequence-feedback-start-dancing"):
+            args.extend([
+                "--no-sequence-feedback-start-dancing",
+                str(cfg.no_sequence_feedback_start_dancing),
+            ])
         if cfg.live_emit_minor_order_text:
             args.append("--live-emit-minor-order-text")
         if cfg.llm_enabled:
@@ -241,9 +251,12 @@ def build_backend_command(cfg: StudioConfig, run_id: str | None = None) -> tuple
             str(cfg.live_z_threshold),
             "--live-major-order-threshold",
             str(cfg.live_major_order_threshold),
-            "--no-sequence-feedback-start-dancing",
-            str(cfg.no_sequence_feedback_start_dancing),
         ]
+        if _script_supports_arg(script, "--no-sequence-feedback-start-dancing"):
+            args.extend([
+                "--no-sequence-feedback-start-dancing",
+                str(cfg.no_sequence_feedback_start_dancing),
+            ])
         if cfg.live_emit_minor_order_text:
             args.append("--live-emit-minor-order-text")
         if cfg.llm_enabled:

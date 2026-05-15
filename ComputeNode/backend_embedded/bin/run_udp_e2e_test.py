@@ -26,6 +26,8 @@ if str(SRC_ROOT) not in sys.path:
 from pipeline_core.offline_runner import candidate_root_overrides, resolve_placeholders
 from pipeline_core.realtime.engine import RealtimeWindowEngine
 from pipeline_core.realtime.prompt_windows import (
+    _normalize_event_base_to_pattern_key,
+    _split_base_phase,
     build_window_record,
     build_window_records_from_stage7,
     load_enriched_pattern,
@@ -197,6 +199,21 @@ def _no_sequence_feedback() -> Dict[str, Any]:
         "latency_s": 0.0,
         "source": "rule:no_sequence_detected",
     }
+
+
+def _has_sequence_like_events(stage7_data: Dict[str, Any]) -> bool:
+    for ev in stage7_data.get("events") or []:
+        if not isinstance(ev, dict):
+            continue
+        label = str(ev.get("label") or "")
+        if not label:
+            continue
+        base, phase = _split_base_phase(label)
+        if phase not in {"start", "end"}:
+            continue
+        if _normalize_event_base_to_pattern_key(base):
+            return True
+    return False
 
 
 def _model_input_from_stage7_file(
@@ -756,11 +773,16 @@ def main() -> int:
                     # optional: call LLM server and save feedback
                     if args.llm_url and feedback_path is not None:
                         has_sequence = bool(list(window_record.get("current_sequence") or []))
+                        has_sequence_like_events = _has_sequence_like_events(stage7_data)
                         no_sequence_threshold = max(1, int(args.no_sequence_feedback_start_dancing))
                         if has_sequence:
                             with live_state_lock:
                                 live_state["no_sequence_streak"] = 0
                             fb = _call_llm_server(args.llm_url, rec)
+                        elif not has_sequence_like_events:
+                            with live_state_lock:
+                                live_state["no_sequence_streak"] = 0
+                            fb = _no_sequence_feedback()
                         else:
                             with live_state_lock:
                                 live_state["no_sequence_streak"] = int(live_state["no_sequence_streak"]) + 1
@@ -769,6 +791,10 @@ def main() -> int:
                                 fb = _no_sequence_feedback()
                             else:
                                 fb = None
+                                print(
+                                    f"[LIVE] no complete sequence yet "
+                                    f"(streak={no_sequence_streak}/{no_sequence_threshold}); waiting"
+                                )
                         if fb is not None:
                             fb_rec = {
                                 "window_index": manifest.get("window_index"),

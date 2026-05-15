@@ -33,6 +33,13 @@ def _dancer_subdir(first: str, last: str) -> str:
     return safe
 
 
+def _script_supports_arg(script: Path, arg_name: str) -> bool:
+    try:
+        return arg_name in script.read_text(encoding="utf-8")
+    except Exception:
+        return False
+
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -200,9 +207,12 @@ class SessionRunner:
             str(live_z_threshold),
             "--live-major-order-threshold",
             str(live_major_order_threshold),
-            "--no-sequence-feedback-start-dancing",
-            str(no_sequence_feedback_start_dancing),
         ]
+        if _script_supports_arg(script, "--no-sequence-feedback-start-dancing"):
+            cmd.extend([
+                "--no-sequence-feedback-start-dancing",
+                str(no_sequence_feedback_start_dancing),
+            ])
 
         if live_emit_minor_order_text:
             cmd.append("--live-emit-minor-order-text")
